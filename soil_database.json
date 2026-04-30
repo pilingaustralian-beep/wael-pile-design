@@ -1,0 +1,23 @@
+{
+    "Sand": {
+        "Very Loose Sand": {"gamma": 16.0, "phi": 28.0, "Nq": 40.0, "Ks": 0.15, "nh": 2.5, "Es": 10000},
+        "Loose Sand": {"gamma": 17.0, "phi": 30.0, "Nq": 60.0, "Ks": 0.2, "nh": 5.0, "Es": 15000},
+        "Medium Dense Sand": {"gamma": 18.5, "phi": 34.0, "Nq": 100.0, "Ks": 0.35, "nh": 12.0, "Es": 30000},
+        "Dense Sand": {"gamma": 20.0, "phi": 36.0, "Nq": 160.0, "Ks": 0.5, "nh": 20.0, "Es": 50000},
+        "Very Dense Sand": {"gamma": 21.0, "phi": 40.0, "Nq": 250.0, "Ks": 0.7, "nh": 40.0, "Es": 80000}
+    },
+    "Clay": {
+        "Very Soft Clay (Sabkha)": {"gamma": 16.0, "Cu": 15.0, "alpha": 0.9, "Nc": 9.0, "nh": 1.0, "Es": 5000},
+        "Soft Clay": {"gamma": 17.5, "Cu": 30.0, "alpha": 0.7, "Nc": 9.0, "nh": 2.5, "Es": 10000},
+        "Medium Stiff Clay": {"gamma": 18.5, "Cu": 60.0, "alpha": 0.5, "Nc": 9.0, "nh": 5.0, "Es": 25000},
+        "Stiff Clay": {"gamma": 20.0, "Cu": 120.0, "alpha": 0.4, "Nc": 9.0, "nh": 10.0, "Es": 50000},
+        "Very Stiff Clay": {"gamma": 21.0, "Cu": 200.0, "alpha": 0.35, "Nc": 9.0, "nh": 20.0, "Es": 100000}
+    },
+    "Rock": {
+        "Weak Calcarenite": {"gamma": 18.0, "quc": 1.5, "Nc": 9.0, "RQD": 0.3, "nh": 50.0, "Es": 150000, "alpha_rock": 0.3},
+        "Medium Calcarenite": {"gamma": 19.5, "quc": 4.0, "Nc": 9.0, "RQD": 0.5, "nh": 150.0, "Es": 400000, "alpha_rock": 0.4},
+        "Weak Sandstone": {"gamma": 20.0, "quc": 5.0, "Nc": 9.0, "RQD": 0.4, "nh": 200.0, "Es": 500000, "alpha_rock": 0.4},
+        "Strong Limestone (Simsima)": {"gamma": 23.0, "quc": 25.0, "Nc": 9.0, "RQD": 0.85, "nh": 1000.0, "Es": 2000000, "alpha_rock": 0.5},
+        "Siltstone / Mudstone": {"gamma": 20.0, "quc": 2.0, "Nc": 9.0, "RQD": 0.4, "nh": 80.0, "Es": 100000, "alpha_rock": 0.3}
+    }
+}
