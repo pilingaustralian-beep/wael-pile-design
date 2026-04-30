@@ -17,20 +17,20 @@ import os
 
 # --- SOIL DATABASE (Failsafe Internal) ---
 SOIL_DB = {
-    "رمل (Sand)": {
-        "رمل ضعيف (Loose)": {"gamma": 17.0, "phi": 28.0, "Nq": 30.0, "Es": 15000.0},
-        "رمل متوسط (Medium)": {"gamma": 18.5, "phi": 32.0, "Nq": 60.0, "Es": 30000.0},
-        "رمل كثيف (Dense)": {"gamma": 20.0, "phi": 38.0, "Nq": 120.0, "Es": 50000.0},
+    "Sand": {
+        "Loose Sand": {"gamma": 17.0, "phi": 28.0, "Nq": 30.0, "Es": 15000.0},
+        "Medium Sand": {"gamma": 18.5, "phi": 32.0, "Nq": 60.0, "Es": 30000.0},
+        "Dense Sand": {"gamma": 20.0, "phi": 38.0, "Nq": 120.0, "Es": 50000.0},
     },
-    "طين (Clay)": {
-        "طين ضعيف (Soft)": {"gamma": 16.0, "Cu": 25.0, "alpha": 0.9, "Es": 5000.0},
-        "طين متوسط (Medium)": {"gamma": 18.0, "Cu": 50.0, "alpha": 0.7, "Es": 15000.0},
-        "طين صلب (Stiff)": {"gamma": 20.0, "Cu": 100.0, "alpha": 0.45, "Es": 30000.0},
+    "Clay": {
+        "Soft Clay": {"gamma": 16.0, "Cu": 25.0, "alpha": 0.9, "Es": 5000.0},
+        "Medium Clay": {"gamma": 18.0, "Cu": 50.0, "alpha": 0.7, "Es": 15000.0},
+        "Stiff Clay": {"gamma": 20.0, "Cu": 100.0, "alpha": 0.45, "Es": 30000.0},
     },
-    "صخر (Rock)": {
-        "صخر ضعيف (Weak)": {"gamma": 22.0, "quc": 5.0, "Nc": 10.0, "alpha_rock": 0.1, "RQD": 0.3},
-        "صخر متوسط (Medium)": {"gamma": 24.0, "quc": 20.0, "Nc": 20.0, "alpha_rock": 0.3, "RQD": 0.6},
-        "صخر صلب (Hard)": {"gamma": 26.0, "quc": 50.0, "Nc": 40.0, "alpha_rock": 0.5, "RQD": 0.9},
+    "Rock": {
+        "Weak Rock": {"gamma": 22.0, "quc": 5.0, "Nc": 10.0, "alpha_rock": 0.1, "RQD": 0.3},
+        "Medium Rock": {"gamma": 24.0, "quc": 20.0, "Nc": 20.0, "alpha_rock": 0.3, "RQD": 0.6},
+        "Hard Rock": {"gamma": 26.0, "quc": 50.0, "Nc": 40.0, "alpha_rock": 0.5, "RQD": 0.9},
     }
 }
 
@@ -278,7 +278,7 @@ with tab2:
     
     col_lib1, col_lib2, col_lib3 = st.columns([1, 1, 1])
     with col_lib1:
-        lib_cat = st.selectbox("Soil Category", list(SOIL_DB.keys()))
+        lib_cat = st.selectbox("Soil Category", ["Sand", "Clay", "Rock"])
     with col_lib2:
         db_options = SOIL_DB.get(lib_cat, {})
         if db_options:
@@ -288,9 +288,9 @@ with tab2:
     with col_lib3:
         if st.button("➕ Add Layer from Library") and lib_type != "No data":
             props = SOIL_DB[lib_cat][lib_type]
-            if "رمل" in lib_cat:
+            if lib_cat == "Sand":
                 stype, val1, val2 = "رمل", props["phi"], props["Nq"]
-            elif "طين" in lib_cat:
+            elif lib_cat == "Clay":
                 stype, val1, val2 = "طين", props["Cu"], props["alpha"]
             else:
                 stype, val1, val2 = "صخر", props["quc"], props["Nc"]
