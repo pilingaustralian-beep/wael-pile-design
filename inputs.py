@@ -88,22 +88,3 @@ class DesignOptions:
     nh: float = 5.0                 # MN/m³
     out_of_position: float = 0.075   # m
     assumed_horizontal_pct: float = 0.03
-
-# --- SOIL DATABASE FOR LIBRARY ---
-SOIL_DB = {
-    "Sand": {
-        "Loose Sand": {"gamma": 17.0, "phi": 28.0, "Nq": 30.0, "Es": 15000.0},
-        "Medium Sand": {"gamma": 18.5, "phi": 32.0, "Nq": 60.0, "Es": 30000.0},
-        "Dense Sand": {"gamma": 20.0, "phi": 38.0, "Nq": 120.0, "Es": 50000.0},
-    },
-    "Clay": {
-        "Soft Clay": {"gamma": 16.0, "Cu": 25.0, "alpha": 0.9, "Es": 5000.0},
-        "Medium Clay": {"gamma": 18.0, "Cu": 50.0, "alpha": 0.7, "Es": 15000.0},
-        "Stiff Clay": {"gamma": 20.0, "Cu": 100.0, "alpha": 0.45, "Es": 30000.0},
-    },
-    "Rock": {
-        "Weak Rock": {"gamma": 22.0, "quc": 5.0, "Nc": 10.0, "alpha_rock": 0.1, "RQD": 0.3},
-        "Medium Rock": {"gamma": 24.0, "quc": 20.0, "Nc": 20.0, "alpha_rock": 0.3, "RQD": 0.6},
-        "Hard Rock": {"gamma": 26.0, "quc": 50.0, "Nc": 40.0, "alpha_rock": 0.5, "RQD": 0.9},
-    }
-}

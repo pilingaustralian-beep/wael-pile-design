@@ -106,13 +106,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Load Soil Database
-DB_PATH = os.path.join("data", "soil_database.json")
-if os.path.exists(DB_PATH):
-    with open(DB_PATH, "r", encoding="utf-8") as f:
-        SOIL_DB = json.load(f)
-else:
-    SOIL_DB = {"Sand": {}, "Clay": {}}
+# --- Session State Initialization ---
 
 # --- 1. Session State Initialization ---
 initial_values = {
