@@ -274,25 +274,18 @@ with tab1:
     c4.number_input("Link Spacing (mm)", 50, 400, key="stirrup_sp")
 
 with tab2:
-    st.subheader("Soil Stratigraphy & Library")
+    st.subheader(f"Soil Stratigraphy & Library (Items: {len(SOIL_DB)})")
     
     col_lib1, col_lib2, col_lib3 = st.columns([1, 1, 1])
-    categories = ["Sand", "Clay", "Rock"]
+    categories = list(SOIL_DB.keys())
     with col_lib1:
-        lib_cat = st.selectbox("Soil Category", categories)
+        lib_cat = st.selectbox("Soil Category", categories if categories else ["None"])
     with col_lib2:
-        # Use direct matching from the list to avoid any hidden character issues
         db_options = SOIL_DB.get(lib_cat, {})
         if db_options:
             lib_type = st.selectbox("Soil Type", list(db_options.keys()))
         else:
-            # Failsafe: Try case-insensitive or partial match
-            matched_cat = next((k for k in SOIL_DB.keys() if lib_cat.lower() in k.lower()), None)
-            db_options = SOIL_DB.get(matched_cat, {}) if matched_cat else {}
-            if db_options:
-                lib_type = st.selectbox("Soil Type", list(db_options.keys()))
-            else:
-                lib_type = st.selectbox("Soil Type", ["No data"], key="no_data_select")
+            lib_type = st.selectbox("Soil Type", ["No data"], key="no_data_select")
     with col_lib3:
         if st.button("➕ Add Layer from Library") and lib_type != "No data":
             props = SOIL_DB[lib_cat][lib_type]
