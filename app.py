@@ -15,22 +15,27 @@ import math
 import json
 import os
 
-# --- SOIL DATABASE (Failsafe Internal) ---
+# --- SOIL DATABASE (Professional Suite) ---
 SOIL_DB = {
     "Sand": {
-        "Loose Sand": {"gamma": 17.0, "phi": 28.0, "Nq": 30.0, "Es": 15000.0},
-        "Medium Sand": {"gamma": 18.5, "phi": 32.0, "Nq": 60.0, "Es": 30000.0},
-        "Dense Sand": {"gamma": 20.0, "phi": 38.0, "Nq": 120.0, "Es": 50000.0},
+        "Very Loose Sand": {"gamma": 16.0, "phi": 26.0, "Nq": 20.0, "Es": 10000.0},
+        "Loose Sand": {"gamma": 17.0, "phi": 29.0, "Nq": 35.0, "Es": 20000.0},
+        "Medium Dense Sand": {"gamma": 18.5, "phi": 32.0, "Nq": 65.0, "Es": 35000.0},
+        "Dense Sand": {"gamma": 20.0, "phi": 36.0, "Nq": 110.0, "Es": 55000.0},
+        "Very Dense Sand": {"gamma": 21.0, "phi": 41.0, "Nq": 160.0, "Es": 80000.0},
     },
     "Clay": {
-        "Soft Clay": {"gamma": 16.0, "Cu": 25.0, "alpha": 0.9, "Es": 5000.0},
-        "Medium Clay": {"gamma": 18.0, "Cu": 50.0, "alpha": 0.7, "Es": 15000.0},
-        "Stiff Clay": {"gamma": 20.0, "Cu": 100.0, "alpha": 0.45, "Es": 30000.0},
+        "Very Soft Clay": {"gamma": 15.0, "Cu": 15.0, "alpha": 1.0, "Es": 3000.0},
+        "Soft Clay": {"gamma": 16.5, "Cu": 30.0, "alpha": 0.85, "Es": 8000.0},
+        "Medium Clay": {"gamma": 18.0, "Cu": 60.0, "alpha": 0.65, "Es": 18000.0},
+        "Stiff Clay": {"gamma": 19.5, "Cu": 120.0, "alpha": 0.45, "Es": 35000.0},
+        "Very Stiff Clay": {"gamma": 20.5, "Cu": 200.0, "alpha": 0.35, "Es": 60000.0},
     },
     "Rock": {
-        "Weak Rock": {"gamma": 22.0, "quc": 5.0, "Nc": 10.0, "alpha_rock": 0.1, "RQD": 0.3},
-        "Medium Rock": {"gamma": 24.0, "quc": 20.0, "Nc": 20.0, "alpha_rock": 0.3, "RQD": 0.6},
-        "Hard Rock": {"gamma": 26.0, "quc": 50.0, "Nc": 40.0, "alpha_rock": 0.5, "RQD": 0.9},
+        "Highly Weathered Rock": {"gamma": 21.0, "quc": 2.0, "Nc": 8.0, "alpha_rock": 0.1, "RQD": 0.2},
+        "Weak Rock (Marl/Shale)": {"gamma": 23.0, "quc": 10.0, "Nc": 15.0, "alpha_rock": 0.25, "RQD": 0.45},
+        "Medium Hard Rock": {"gamma": 24.5, "quc": 25.0, "Nc": 30.0, "alpha_rock": 0.4, "RQD": 0.7},
+        "Hard Rock (Limestone)": {"gamma": 26.0, "quc": 60.0, "Nc": 50.0, "alpha_rock": 0.55, "RQD": 0.9},
     }
 }
 
