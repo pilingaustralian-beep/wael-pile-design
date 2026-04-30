@@ -280,7 +280,6 @@ with tab2:
     with col_lib1:
         lib_cat = st.selectbox("Soil Category", list(SOIL_DB.keys()))
     with col_lib2:
-        # Robust check for category in SOIL_DB
         db_options = SOIL_DB.get(lib_cat, {})
         if db_options:
             lib_type = st.selectbox("Soil Type", list(db_options.keys()))
@@ -289,9 +288,9 @@ with tab2:
     with col_lib3:
         if st.button("➕ Add Layer from Library") and lib_type != "No data":
             props = SOIL_DB[lib_cat][lib_type]
-            if lib_cat == "Sand":
+            if "رمل" in lib_cat:
                 stype, val1, val2 = "رمل", props["phi"], props["Nq"]
-            elif lib_cat == "Clay":
+            elif "طين" in lib_cat:
                 stype, val1, val2 = "طين", props["Cu"], props["alpha"]
             else:
                 stype, val1, val2 = "صخر", props["quc"], props["Nc"]
