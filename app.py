@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
-from inputs import Project, SoilLayer, PileGeometry, Reinforcement, Loads, DesignOptions, SoilType, PileHeadType, RockMethod, SOIL_DB
+from inputs import Project, SoilLayer, PileGeometry, Reinforcement, Loads, DesignOptions, SoilType, PileHeadType, RockMethod
 from geotechnical_pro import calculate_layered_bearing
 from structural import concrete_stress_check, reinforcement_area, ultimate_axial_capacity, min_reinforcement_check, stirrup_spacing_check, generate_interaction_diagram, shear_check, crack_width_check, get_concrete_modulus
 from reese_matlock import moment_and_distribution
@@ -14,6 +14,25 @@ from visuals import draw_longitudinal_section, draw_cross_section, draw_3d_pile_
 import math
 import json
 import os
+
+# --- SOIL DATABASE (Failsafe Internal) ---
+SOIL_DB = {
+    "Sand": {
+        "رمل ضعيف (Loose)": {"gamma": 17.0, "phi": 28.0, "Nq": 30.0, "Es": 15000.0},
+        "رمل متوسط (Medium)": {"gamma": 18.5, "phi": 32.0, "Nq": 60.0, "Es": 30000.0},
+        "رمل كثيف (Dense)": {"gamma": 20.0, "phi": 38.0, "Nq": 120.0, "Es": 50000.0},
+    },
+    "Clay": {
+        "طين ضعيف (Soft)": {"gamma": 16.0, "Cu": 25.0, "alpha": 0.9, "Es": 5000.0},
+        "طين متوسط (Medium)": {"gamma": 18.0, "Cu": 50.0, "alpha": 0.7, "Es": 15000.0},
+        "طين صلب (Stiff)": {"gamma": 20.0, "Cu": 100.0, "alpha": 0.45, "Es": 30000.0},
+    },
+    "Rock": {
+        "صخر ضعيف (Weak)": {"gamma": 22.0, "quc": 5.0, "Nc": 10.0, "alpha_rock": 0.1, "RQD": 0.3},
+        "صخر متوسط (Medium)": {"gamma": 24.0, "quc": 20.0, "Nc": 20.0, "alpha_rock": 0.3, "RQD": 0.6},
+        "صخر صلب (Hard)": {"gamma": 26.0, "quc": 50.0, "Nc": 40.0, "alpha_rock": 0.5, "RQD": 0.9},
+    }
+}
 
 # Page Config
 st.set_page_config(page_title="Pile Design Suite Pro", layout="wide", page_icon="🏗️")
