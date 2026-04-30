@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
-from inputs import Project, SoilLayer, PileGeometry, Reinforcement, Loads, DesignOptions, SoilType, PileHeadType, RockMethod
+from inputs import Project, SoilLayer, PileGeometry, Reinforcement, Loads, DesignOptions, SoilType, PileHeadType, RockMethod, SOIL_DB
 from geotechnical_pro import calculate_layered_bearing
 from structural import concrete_stress_check, reinforcement_area, ultimate_axial_capacity, min_reinforcement_check, stirrup_spacing_check, generate_interaction_diagram, shear_check, crack_width_check, get_concrete_modulus
 from reese_matlock import moment_and_distribution
@@ -260,7 +260,12 @@ with tab2:
     with col_lib1:
         lib_cat = st.selectbox("Soil Category", ["Sand", "Clay", "Rock"])
     with col_lib2:
-        lib_type = st.selectbox("Soil Type", list(SOIL_DB[lib_cat].keys())) if SOIL_DB[lib_cat] else st.selectbox("Soil Type", ["No data"])
+        # Robust check for category in SOIL_DB
+        db_options = SOIL_DB.get(lib_cat, {})
+        if db_options:
+            lib_type = st.selectbox("Soil Type", list(db_options.keys()))
+        else:
+            lib_type = st.selectbox("Soil Type", ["No data"], key="no_data_select")
     with col_lib3:
         if st.button("➕ Add Layer from Library") and lib_type != "No data":
             props = SOIL_DB[lib_cat][lib_type]
