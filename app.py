@@ -17,17 +17,17 @@ import os
 
 # --- SOIL DATABASE (Failsafe Internal) ---
 SOIL_DB = {
-    "Sand": {
+    "رمل (Sand)": {
         "رمل ضعيف (Loose)": {"gamma": 17.0, "phi": 28.0, "Nq": 30.0, "Es": 15000.0},
         "رمل متوسط (Medium)": {"gamma": 18.5, "phi": 32.0, "Nq": 60.0, "Es": 30000.0},
         "رمل كثيف (Dense)": {"gamma": 20.0, "phi": 38.0, "Nq": 120.0, "Es": 50000.0},
     },
-    "Clay": {
+    "طين (Clay)": {
         "طين ضعيف (Soft)": {"gamma": 16.0, "Cu": 25.0, "alpha": 0.9, "Es": 5000.0},
         "طين متوسط (Medium)": {"gamma": 18.0, "Cu": 50.0, "alpha": 0.7, "Es": 15000.0},
         "طين صلب (Stiff)": {"gamma": 20.0, "Cu": 100.0, "alpha": 0.45, "Es": 30000.0},
     },
-    "Rock": {
+    "صخر (Rock)": {
         "صخر ضعيف (Weak)": {"gamma": 22.0, "quc": 5.0, "Nc": 10.0, "alpha_rock": 0.1, "RQD": 0.3},
         "صخر متوسط (Medium)": {"gamma": 24.0, "quc": 20.0, "Nc": 20.0, "alpha_rock": 0.3, "RQD": 0.6},
         "صخر صلب (Hard)": {"gamma": 26.0, "quc": 50.0, "Nc": 40.0, "alpha_rock": 0.5, "RQD": 0.9},
@@ -237,8 +237,9 @@ st.sidebar.markdown(
     """
     <div class="dev-signature" style="text-align: center; padding: 10px; border-top: 1px solid #eee; margin-top: 20px;">
         <p style="margin: 0; color: #666; font-size: 0.8em;">Developed by:</p>
-        <p style="margin: 0; color: #1e3a8a; font-weight: bold; font-size: 1.1em;">Eng. Wael Radwan</p>
-        <p style="margin: 0; color: #999; font-size: 0.75em;">Pile Design Suite - Pro Edition</p>
+            <p style="margin: 0; color: #1e3a8a; font-weight: bold; font-size: 1.1em;">Eng. Wael Radwan</p>
+            <p style="margin: 0; color: #d32f2f; font-weight: bold; font-size: 0.9em;">VERSION 2.1 - UPDATED</p>
+            <p style="margin: 0; color: #999; font-size: 0.75em;">Pile Design Suite - Pro Edition</p>
     </div>
     """,
     unsafe_allow_html=True
@@ -277,7 +278,7 @@ with tab2:
     
     col_lib1, col_lib2, col_lib3 = st.columns([1, 1, 1])
     with col_lib1:
-        lib_cat = st.selectbox("Soil Category", ["Sand", "Clay", "Rock"])
+        lib_cat = st.selectbox("Soil Category", list(SOIL_DB.keys()))
     with col_lib2:
         # Robust check for category in SOIL_DB
         db_options = SOIL_DB.get(lib_cat, {})
