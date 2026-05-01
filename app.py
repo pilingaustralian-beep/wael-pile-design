@@ -107,7 +107,6 @@ st.markdown("""
         .print-page-break {
             page-break-before: always !important;
         }
-    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -115,29 +114,32 @@ st.markdown("""
 
 # --- 1. Session State Initialization ---
 initial_values = {
-    "proj_name": "New Infrastructure Project",
+    "proj_name": "تصميم بايل",
     "job_no": "J-2026-001",
-    "owner": "City Development",
+    "owner": "المالك",
     "consultant": "ABC Engineering",
     "contractor": "XYZ Construction",
-    "dia": 700.0,
-    "length": 20.0,
-    "cut_off": 0.0,
+    "dia": 500.0,
+    "length": 10.2,
+    "cut_off": -1.0,
     "ground_lvl": 0.0,
-    "gwt": -5.0,
-    "p_vertical": 1500.0,
+    "gwt": -3.0,
+    "p_vertical": 1000.0,
     "p_horizontal": 0.0,
-    "allowable_deflection": 12.0,
+    "allowable_deflection": 25.0,
     "fcu": 40.0,
     "fy": 460.0,
     "bar_dia": 16,
-    "bar_num": 8,
+    "bar_num": 6,
     "stirrup_dia": 8,
-    "stirrup_sp": 200,
+    "stirrup_sp": 150,
+    # Updated layers_df based on the provided JSON
     "layers_df": pd.DataFrame([
-        {"Name": "Fill", "Type": "رمل", "Top Depth": 0.0, "Bottom Depth": 3.0, "Gamma": 17.0, "Phi/Cu/quc": 28.0, "Nq/Alpha/Nc": 50.0, "Es": 15000.0, "alpha_rock": 0.4, "RQD": 0.5}
+        {"Name": "Fill", "Type": "رمل", "Top Depth": 0.0, "Bottom Depth": 2.0, "Gamma": 17.0, "Phi/Cu/quc": 28.0, "Nq/Alpha/Nc": 50.0, "Es": 15000.0, "alpha_rock": np.nan, "RQD": np.nan},
+        {"Name": "Medium Clay", "Type": "طين", "Top Depth": 2.0, "Bottom Depth": 5.0, "Gamma": 18.0, "Phi/Cu/quc": 60.0, "Nq/Alpha/Nc": 0.65, "Es": 18000.0, "alpha_rock": 0.4, "RQD": 0.5},
+        {"Name": "Medium Hard Rock", "Type": "صخر", "Top Depth": 5.0, "Bottom Depth": 30.0, "Gamma": 24.5, "Phi/Cu/quc": 25.0, "Nq/Alpha/Nc": 30.0, "Es": 25000.0, "alpha_rock": 0.4, "RQD": 0.7}
     ]),
-    "socket_mode": False,
+    "socket_mode": True,
     "fos_geotech": 2.5
 }
 
@@ -145,7 +147,7 @@ for key, val in initial_values.items():
     if key not in st.session_state:
         st.session_state[key] = val
 
-# --- 2. Helper Functions ---
+# --- 2. Helper Functions ---\
 def sync_data(data):
     # Mapping of JSON keys to session_state keys
     if "project" in data:
@@ -419,7 +421,13 @@ with tab4:
     socket_mode = st.session_state.socket_mode
     
     first_rock_found = False
-    for _, row in edited_df.iterrows():
+    # Ensure edited_df is used here if it exists, otherwise fallback to session state
+    try:
+        current_layers_df = st.session_state.layers_df
+    except:
+        current_layers_df = pd.DataFrame(initial_values["layers_df"]) # Fallback if session state is lost
+
+    for _, row in current_layers_df.iterrows():
         if row["Type"] == "رمل": stype = SoilType.SAND
         elif row["Type"] == "طين": stype = SoilType.CLAY
         else: stype = SoilType.ROCK
@@ -464,83 +472,86 @@ with tab4:
         )
 
 
-
-        layers.append(layer)
-
+    layers.append(layer)
     
-    geo_res = calculate_layered_bearing(layers, pile, loads, options)
-    Ac = math.pi * dia**2 / 4.0
-    Asc = reinforcement_area(bar_dia, bar_num)
-    fc, fa, conc_ok = concrete_stress_check(Ac, p_vertical, fcu)
-    N_ult = ultimate_axial_capacity(Ac, Asc, fcu, fy)
-    
-    analysis_method = st.radio("Lateral Analysis Method", ["Simplified (Reese-Matlock)", "Numerical (Finite Difference)"], horizontal=True, key="lateral_method_choice")
-    if analysis_method == "Simplified (Reese-Matlock)":
-        T_val, Zmax, curve, Mmax = moment_and_distribution(pile, loads, options)
-        z_graph, m_graph, y_graph, v_graph = [c[0] for c in curve], [c[1] for c in curve], [c[2] for c in curve], [c[3] for c in curve]
-        main_type = layers[0].soil_type if layers else SoilType.SAND
-        label_stiff = "Characteristic Length (R)" if main_type == SoilType.CLAY else "Stiffness Factor (T)"
+    # Ensure layers list is not empty before proceeding
+    if not layers:
+        st.error("No soil layers defined. Please add soil layers in the 'Soil Profile' tab.")
     else:
-        z_graph, y_graph, moments, shears, Mmax = solve_lateral_fdm(pile, layers, loads, options)
-        m_graph, y_graph, v_graph = moments.tolist(), y_graph.tolist(), shears.tolist()
-        # Determine if we use T (Sand) or R (Clay) based on the first layer
-        main_type = layers[0].soil_type if layers else SoilType.SAND
-        D_m = dia/1000.0
-        I_m4 = math.pi * D_m**4 / 64.0
-        EI = options.E_concrete * 1000 * I_m4
+        geo_res = calculate_layered_bearing(layers, pile, loads, options)
+        Ac = math.pi * dia**2 / 4.0
+        Asc = reinforcement_area(bar_dia, bar_num)
+        fc, fa, conc_ok = concrete_stress_check(Ac, p_vertical, fcu)
+        N_ult = ultimate_axial_capacity(Ac, Asc, fcu, fy)
         
-        if main_type == SoilType.CLAY:
-            label_stiff = "Characteristic Length (R)"
-            # R = (EI / k)^0.25, where k is subgrade modulus (approx 0.2*Cu*100)
-            k_val = layers[0].Cu * 20 # Simplified k from Cu
-            T_val = (EI / (k_val if k_val > 0 else 1.0))**0.25
+        analysis_method = st.radio("Lateral Analysis Method", ["Simplified (Reese-Matlock)", "Numerical (Finite Difference)"], horizontal=True, key="lateral_method_choice")
+        if analysis_method == "Simplified (Reese-Matlock)":
+            T_val, Zmax, curve, Mmax = moment_and_distribution(pile, loads, options)
+            z_graph, m_graph, y_graph, v_graph = [c[0] for c in curve], [c[1] for c in curve], [c[2] for c in curve], [c[3] for c in curve]
+            main_type = layers[0].soil_type if layers else SoilType.SAND
+            label_stiff = "Characteristic Length (R)" if main_type == SoilType.CLAY else "Stiffness Factor (T)"
         else:
-            label_stiff = "Stiffness Factor (T)"
-            T_val = (EI / (options.nh if options.nh > 0 else 1.0))**0.2
+            z_graph, y_graph, moments, shears, Mmax = solve_lateral_fdm(pile, layers, loads, options)
+            m_graph, y_graph, v_graph = moments.tolist(), y_graph.tolist(), shears.tolist()
+            # Determine if we use T (Sand) or R (Clay) based on the first layer
+            main_type = layers[0].soil_type if layers else SoilType.SAND
+            D_m = dia/1000.0
+            I_m4 = math.pi * D_m**4 / 64.0
+            EI = options.E_concrete * 1000 * I_m4
+            
+            if main_type == SoilType.CLAY:
+                label_stiff = "Characteristic Length (R)"
+                # R = (EI / k)^0.25, where k is subgrade modulus (approx 0.2*Cu*100)
+                k_val = layers[0].Cu * 20 # Simplified k from Cu
+                T_val = (EI / (k_val if k_val > 0 else 1.0))**0.25
+            else:
+                label_stiff = "Stiffness Factor (T)"
+                T_val = (EI / (options.nh if options.nh > 0 else 1.0))**0.2
 
-    # Now calculate required reinforcement after Mmax is available
-    rho_prov, rho_req, rho_ok = min_reinforcement_check(Ac, Asc, dia, p_vertical, Mmax, fcu, fy)
+        # Now calculate required reinforcement after Mmax is available
+        rho_prov, rho_req, rho_ok = min_reinforcement_check(Ac, Asc, dia, p_vertical, Mmax, fcu, fy)
 
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Geotech FoS", f"{geo_res['FoS']:.2f}", delta="Safe" if geo_res['FoS'] >= 3 else "Unsafe")
-    m2.metric("Safe Comp (kN)", f"{geo_res['Qall']:.0f}")
-    m3.metric("Safe Tens (kN)", f"{geo_res['Qall_tens']:.0f}")
-    m4.metric("Settlement (mm)", f"{geo_res['Settlement']:.1f}")
+        m1, m2, m3, m4 = st.columns(4)
+        # Safely access results, provide defaults if keys are missing
+        m1.metric("Geotech FoS", f"{geo_res.get('FoS', 0):.2f}", delta="Safe" if geo_res.get('FoS', 0) >= 3 else "Unsafe")
+        m2.metric("Safe Comp (kN)", f"{geo_res.get('Qall', 0):.0f}")
+        m3.metric("Safe Tens (kN)", f"{geo_res.get('Qall_tens', 0):.0f}")
+        m4.metric("Settlement (mm)", f"{geo_res.get('Settlement', 0):.1f}")
 
-    st.info(f"ℹ️ **Engineering Note:** Analysis includes **Groundwater Table** effects at {gwt}m and **Critical Depth** (z_c = {15*dia/1000:.1f}m) for skin friction and end bearing.")
+        st.info(f"ℹ️ **Engineering Note:** Analysis includes **Groundwater Table** effects at {gwt}m and **Critical Depth** (z_c = {15*dia/1000:.1f}m) for skin friction and end bearing.")
 
-    st.write("---")
-    st.subheader("Visual Analysis")
-    c_sch1, c_res_sch2 = st.columns(2)
-    with c_sch1: st.plotly_chart(draw_longitudinal_section(pile, layers, reinf), use_container_width=True, key="sch_long_analysis")
-    with c_res_sch2: st.plotly_chart(draw_cross_section(pile, reinf), use_container_width=True, key="sch_cross_analysis")
+        st.write("---")
+        st.subheader("Visual Analysis")
+        c_sch1, c_res_sch2 = st.columns(2)
+        with c_sch1: st.plotly_chart(draw_longitudinal_section(pile, layers, reinf), use_container_width=True, key="sch_long_analysis")
+        with c_res_sch2: st.plotly_chart(draw_cross_section(pile, reinf), use_container_width=True, key="sch_cross_analysis")
 
-    g1, g2, g3 = st.columns(3)
-    with g1:
-        fig_m = px.line(x=m_graph, y=z_graph, labels={'x': 'Moment (kNm)', 'y': 'Depth (m)'}, title="Moment Diagram")
-        fig_m.update_yaxes(autorange="reversed")
-        st.plotly_chart(fig_m, use_container_width=True, key="graph_moment_analysis")
-    with g2:
-        fig_v = px.line(x=v_graph, y=z_graph, labels={'x': 'Shear (kN)', 'y': 'Depth (m)'}, title="Shear Force Diagram")
-        fig_v.update_yaxes(autorange="reversed")
-        st.plotly_chart(fig_v, use_container_width=True, key="graph_shear_analysis")
-    with g3:
-        fig_y = px.line(x=y_graph, y=z_graph, labels={'x': 'Deflection (mm)', 'y': 'Depth (m)'}, title="Displacement Diagram")
-        fig_y.update_yaxes(autorange="reversed")
-        st.plotly_chart(fig_y, use_container_width=True, key="graph_disp_analysis")
+        g1, g2, g3 = st.columns(3)
+        with g1:
+            fig_m = px.line(x=m_graph, y=z_graph, labels={'x': 'Moment (kNm)', 'y': 'Depth (m)'}, title="Moment Diagram")
+            fig_m.update_yaxes(autorange="reversed")
+            st.plotly_chart(fig_m, use_container_width=True, key="graph_moment_analysis")
+        with g2:
+            fig_v = px.line(x=v_graph, y=z_graph, labels={'x': 'Shear (kN)', 'y': 'Depth (m)'}, title="Shear Force Diagram")
+            fig_v.update_yaxes(autorange="reversed")
+            st.plotly_chart(fig_v, use_container_width=True, key="graph_shear_analysis")
+        with g3:
+            fig_y = px.line(x=y_graph, y=z_graph, labels={'x': 'Deflection (mm)', 'y': 'Depth (m)'}, title="Displacement Diagram")
+            fig_y.update_yaxes(autorange="reversed")
+            st.plotly_chart(fig_y, use_container_width=True, key="graph_disp_analysis")
 
-    st.write("---")
-    N_pts, M_pts = generate_interaction_diagram(dia, fcu, fy, bar_num, bar_dia, pile.cover)
-    fig_nm = go.Figure()
-    fig_nm.add_trace(go.Scatter(x=M_pts, y=N_pts, name="Capacity Envelope", line=dict(color='red', dash='dash')))
-    fig_nm.add_trace(go.Scatter(x=[Mmax], y=[p_vertical], name="Design Point", mode='markers', marker=dict(size=12, color='blue')))
-    fig_nm.update_layout(xaxis_title="Moment M (kNm)", yaxis_title="Axial Load N (kN)", title="N-M Interaction Diagram")
-    st.plotly_chart(fig_nm, use_container_width=True, key="graph_nm_analysis")
+        st.write("---")
+        N_pts, M_pts = generate_interaction_diagram(dia, fcu, fy, bar_num, bar_dia, pile.cover)
+        fig_nm = go.Figure()
+        fig_nm.add_trace(go.Scatter(x=M_pts, y=N_pts, name="Capacity Envelope", line=dict(color='red', dash='dash')))
+        fig_nm.add_trace(go.Scatter(x=[Mmax], y=[p_vertical], name="Design Point", mode='markers', marker=dict(size=12, color='blue')))
+        fig_nm.update_layout(xaxis_title="Moment M (kNm)", yaxis_title="Axial Load N (kN)", title="N-M Interaction Diagram")
+        st.plotly_chart(fig_nm, use_container_width=True, key="graph_nm_analysis")
 
-    st.divider()
-    st.subheader("🧊 3D Model Visualization")
-    fig_3d = draw_3d_pile_model(pile, layers)
-    st.plotly_chart(fig_3d, use_container_width=True, key="graph_3d_analysis")
+        st.divider()
+        st.subheader("🧊 3D Model Visualization")
+        fig_3d = draw_3d_pile_model(pile, layers)
+        st.plotly_chart(fig_3d, use_container_width=True, key="graph_3d_analysis")
 
 with tab5:
     report_container = st.container()
@@ -576,7 +587,8 @@ with tab5:
         with col_in2:
             st.markdown("**Soil Stratigraphy**")
             soil_html = "<table class='print-table'><tr><th>Name</th><th>Type</th><th>Top (m)</th><th>Base (m)</th><th>γ (kN/m³)</th></tr>"
-            for _, r in edited_df.iterrows():
+            # Use the potentially updated session state layers_df
+            for _, r in st.session_state.layers_df.iterrows():
                 soil_html += f"<tr><td>{r['Name']}</td><td>{r['Type']}</td><td>{r['Top Depth']}</td><td>{r['Bottom Depth']}</td><td>{r['Gamma']}</td></tr>"
             soil_html += "</table>"
             st.markdown(soil_html, unsafe_allow_html=True)
@@ -590,34 +602,38 @@ with tab5:
 
         st.markdown('<div class="section-header">2. GEOTECHNICAL ANALYSIS RESULTS</div>', unsafe_allow_html=True)
         c_res1, c_res2, c_res3, c_res4 = st.columns(4)
-        c_res1.metric("Ult. Compression (Qu)", f"{geo_res['Qu']:.1f} kN")
-        c_res2.metric("Safe Compression (Qall)", f"{geo_res['Qall']:.1f} kN")
-        c_res3.metric("Ult. Tension (Qu_t)", f"{geo_res['Qu_tens']:.1f} kN")
-        c_res4.metric("Safe Tension (Qall_t)", f"{geo_res['Qall_tens']:.1f} kN")
+        c_res1.metric("Ult. Compression (Qu)", f"{geo_res.get('Qu', 0):.1f} kN")
+        c_res2.metric("Safe Compression (Qall)", f"{geo_res.get('Qall', 0):.1f} kN")
+        c_res3.metric("Ult. Tension (Qu_t)", f"{geo_res.get('Qu_tens', 0):.1f} kN")
+        c_res4.metric("Safe Tension (Qall_t)", f"{geo_res.get('Qall_tens', 0):.1f} kN")
         
         with st.expander("📝 Detailed Geotechnical Calculations", expanded=True):
             st.markdown("**A. Shaft Friction (Qs):**")
-            st.markdown(f"Total Effective Shaft Area = π * D * L_eff = π * {dia/1000} * {geo_res['L_eff']:.2f} = **{geo_res['As_eff']:.2f} m²**")
-            st.table(pd.DataFrame(geo_res["Segments"]))
-            st.markdown(f"**ΣQs = {geo_res['Qs']:.2f} kN**")
+            # Use .get() for safety in case keys are missing
+            st.markdown(f"Total Effective Shaft Area = π * D * L_eff = π * {pile.diameter/1000} * {geo_res.get('L_eff', 0):.2f} = **{geo_res.get('As_eff', 0):.2f} m²**")
+            if "Segments" in geo_res and isinstance(geo_res["Segments"], list):
+                 st.table(pd.DataFrame(geo_res["Segments"]))
+            else:
+                 st.write("No detailed segment data available.")
+            st.markdown(f"**ΣQs = {geo_res.get('Qs', 0):.2f} kN**")
             
             st.markdown("**B. Toe Bearing (Qb):**")
-            st.markdown(f"Toe Area (Ab) = π * D² / 4 = {math.pi*(dia/1000)**2/4:.4f} m²")
-            st.code(geo_res["ToeNote"])
-            st.markdown(f"**Qb = {geo_res['Qb']:.2f} kN**")
+            st.markdown(f"Toe Area (Ab) = π * D² / 4 = {math.pi*(pile.diameter/1000)**2/4:.4f} m²")
+            st.code(geo_res.get("ToeNote", "No toe note available."))
+            st.markdown(f"**Qb = {geo_res.get('Qb', 0):.2f} kN**")
             
             st.markdown("**C. Total Capacity:**")
-            st.markdown(f"Qu = Qs + Qb = {geo_res['Qs']:.2f} + {geo_res['Qb']:.2f} = **{geo_res['Qu']:.2f} kN**")
-            st.markdown(f"Qall = Qu / FoS_req = {geo_res['Qu']:.2f} / {options.fos_geotech} = **{geo_res['Qall']:.2f} kN**")
+            st.markdown(f"Qu = Qs + Qb = {geo_res.get('Qs', 0):.2f} + {geo_res.get('Qb', 0):.2f} = **{geo_res.get('Qu', 0):.2f} kN**")
+            st.markdown(f"Qall = Qu / FoS_req = {geo_res.get('Qu', 0):.2f} / {options.fos_geotech} = **{geo_res.get('Qall', 0):.2f} kN**")
 
             st.markdown("---")
             st.markdown("**D. Tension/Uplift Capacity:**")
-            st.write(f"- Ultimate Tension (Qu_t) = ΣQs = **{geo_res['Qu_tens']:.2f} kN**")
-            st.write(f"- Safe Tension (Qall_t) = Qu_t / (FoS_geo * 1.5) = **{geo_res['Qall_tens']:.2f} kN**")
+            st.write(f"- Ultimate Tension (Qu_t) = ΣQs = **{geo_res.get('Qu_tens', 0):.2f} kN**")
+            st.write(f"- Safe Tension (Qall_t) = Qu_t / (FoS_geo * 1.5) = **{geo_res.get('Qall_tens', 0):.2f} kN**")
             
             st.markdown("---")
             st.markdown("**E. Settlement Analysis (Serviceability):**")
-            st.write(f"- Estimated Total Settlement (St) = **{geo_res['Settlement']:.2f} mm**")
+            st.write(f"- Estimated Total Settlement (St) = **{geo_res.get('Settlement', 0):.2f} mm**")
             st.write(f"- *Method:* Simplified Elastic (Poulos & Davis)")
             st.write(f"- Components: s1 (Elastic shortening) + s2 (Tip settlement)")
 
@@ -687,8 +703,8 @@ with tab5:
             st.write(f"- Absolute Code Minimum Ratio (ρ_min) = **0.40%**")
             
             # Consistent formulas with structural.py
-            as_m_req = (abs(Mmax) * 10**6) / (0.87 * fy * 0.7 * dia)
-            as_n_req = ((p_vertical * 1000) - (0.4 * fcu * Ac)) / (0.75 * fy)
+            as_m_req = (abs(Mmax) * 10**6) / (0.87 * fy * 0.7 * dia) if dia > 0 else 0 # Avoid division by zero
+            as_n_req = ((p_vertical * 1000) - (0.4 * fcu * Ac)) / (0.75 * fy) if fy > 0 else 0 # Avoid division by zero
             
             st.latex(r"As_{moment} = \frac{M_{max}}{0.87 \cdot f_y \cdot 0.7 \cdot h} = " + f"{max(as_m_req, 0):.0f} " + r"mm^2")
             st.latex(r"As_{axial} = \frac{N - 0.4 \cdot f_{cu} \cdot A_c}{0.75 \cdot f_y} = " + f"{max(as_n_req, 0):.0f} " + r"mm^2")
@@ -697,8 +713,10 @@ with tab5:
             st.write(f"- Required Ratio (ρ_req) = **{rho_req:.2f}%** | Provided Ratio (ρ_prov) = **{rho_prov:.2f}%**")
             
             st.markdown("**D. Shear & Cracking:**")
-            v_app, v_lim, shear_ok = shear_check(Ac, p_horizontal if p_horizontal > 0 else 0.03*p_vertical, fcu, rho_prov)
-            st.write(f"- Applied Shear Force (V) = {p_horizontal if p_horizontal > 0 else 0.03*p_vertical:.1f} kN")
+            # Calculate applied shear more robustly
+            applied_shear = p_horizontal if p_horizontal > 0 else (0.03 * p_vertical if p_vertical > 0 else 0)
+            v_app, v_lim, shear_ok = shear_check(Ac, applied_shear, fcu, rho_prov)
+            st.write(f"- Applied Shear Force (V) = {applied_shear:.1f} kN")
             st.write(f"- Shear Stress (v) = V / Ac = **{v_app:.2f} MPa** vs Limit **{v_lim:.2f} MPa**")
 
         s_act, s_lim, s_ok = stirrup_spacing_check(dia, bar_dia, stirrup_sp)
@@ -709,7 +727,7 @@ with tab5:
 
         st.subheader("4. CONCLUSION & VERIFICATION")
         summary_final = [
-            {"Check": "Geotech FoS", "Req": f"> {options.fos_geotech}", "Act": f"{geo_res['FoS']:.2f}", "Status": "✅ PASS" if geo_res['FoS'] >= options.fos_geotech else "❌ FAIL"},
+            {"Check": "Geotech FoS", "Req": f"> {options.fos_geotech}", "Act": f"{geo_res.get('FoS', 0):.2f}", "Status": "✅ PASS" if geo_res.get('FoS', 0) >= options.fos_geotech else "❌ FAIL"},
             {"Check": "Reinforcement %", "Req": f"min {rho_req}%", "Act": f"{rho_prov:.2f}%", "Status": "✅ PASS" if rho_ok else "❌ FAIL"},
             {"Check": "Stirrup Spacing", "Req": f"< {s_lim} mm", "Act": f"{s_act} mm", "Status": "✅ PASS" if s_ok else "❌ FAIL"},
             {"Check": "Shear Stress", "Req": f"< {v_lim:.2f} MPa", "Act": f"{v_app:.2f} MPa", "Status": "✅ PASS" if shear_ok else "❌ FAIL"},
