@@ -218,6 +218,11 @@ if uploaded_file:
         load_project(uploaded_file)
 
 st.sidebar.divider()
+st.sidebar.subheader("⚙️ Global Design Options")
+st.sidebar.checkbox("Socket Analysis Mode", key="socket_mode", help="Ignore skin friction for all layers above the first rock layer.")
+st.sidebar.number_input("Geotech Factor of Safety (FoS)", 1.5, 5.0, key="fos_geotech")
+
+st.sidebar.divider()
 st.sidebar.text_input("Project Name", key="proj_name")
 st.sidebar.text_input("Job Number", key="job_no")
 st.sidebar.text_input("Owner", key="owner")
@@ -265,9 +270,13 @@ with tab1:
         st.number_input("Allowable Lateral Deflection (mm)", 1.0, 100.0, key="allowable_deflection")
         st.number_input("Concrete Grade fcu (N/mm²)", 20.0, 100.0, key="fcu")
         st.number_input("Steel Grade fy (N/mm²)", 250.0, 600.0, key="fy")
-        st.number_input("Geotech Factor of Safety (FoS)", 1.5, 5.0, key="fos_geotech")
     
-    st.subheader("Reinforcement")
+    st.subheader("Geotechnical Summary")
+    if st.session_state.socket_mode:
+        st.warning("⚠️ **Socket Analysis Mode ACTIVE**: Skin friction is ignored for all layers above the first rock layer.")
+    else:
+        st.info("ℹ️ **Full Friction Mode**: Skin friction is calculated for all soil and rock layers.")
+    
     c1, c2, c3, c4 = st.columns(4)
     c1.number_input("Bar Dia (mm)", 8, 40, key="bar_dia")
     c2.number_input("Number of Bars", 4, 100, key="bar_num")
@@ -410,14 +419,15 @@ with tab4:
     stirrup_sp = st.session_state.stirrup_sp
 
     st.subheader("Analysis & Visualization")
+    if st.session_state.socket_mode:
+        st.warning("⚠️ Socket Analysis Mode is ACTIVE.")
+    
     pile = PileGeometry(diameter=dia, pile_length=length, cut_off_level=cut_off, ground_level=ground_lvl, gwt_level=gwt)
     loads = Loads(working_vertical=p_vertical, horizontal=p_horizontal)
     options = DesignOptions(fcu=fcu, fy=fy, E_concrete=get_concrete_modulus(fcu), fos_geotech=st.session_state.fos_geotech)
     reinf = Reinforcement(bar_diameter=bar_dia, num_bars=bar_num, stirrup_diameter=stirrup_dia, stirrup_spacing=stirrup_sp)
     
     layers = []
-    # Use key="socket_mode" to link it directly to st.session_state.socket_mode
-    st.sidebar.checkbox("Socket Analysis Mode", key="socket_mode", help="Ignore skin friction for all layers above the first rock layer.")
     socket_mode = st.session_state.socket_mode
     
     first_rock_found = False
@@ -432,13 +442,17 @@ with tab4:
         elif row["Type"] == "طين": stype = SoilType.CLAY
         else: stype = SoilType.ROCK
         
-        # Socket Mode Logic
-        ignore_friction = False
+                # Socket Mode Logic - Corrected
+        ignore_friction = False # Default to False
         if socket_mode:
             if stype == SoilType.ROCK:
-                first_rock_found = True
-            if not first_rock_found:
-                ignore_friction = True
+                first_rock_found = True # Mark that we've hit rock
+            
+            # Only apply ignore_friction if we are in socket mode AND we haven't hit rock yet
+            if not first_rock_found: 
+                ignore_friction = True 
+        # If socket_mode is False, ignore_friction remains False (default) 
+
         
         # Robust RQD handling
         RQD_raw = row.get("RQD")
@@ -471,8 +485,7 @@ with tab4:
             Ks=float(row["Nq/Alpha/Nc"]) if stype == SoilType.SAND and pd.notna(row.get("Nq/Alpha/Nc")) else 1.0
         )
 
-
-    layers.append(layer)
+        layers.append(layer)
     
     # Ensure layers list is not empty before proceeding
     if not layers:
@@ -556,7 +569,12 @@ with tab4:
 with tab5:
     report_container = st.container()
     with report_container:
-        st.title("🏗️ FINAL DESIGN CALCULATION REPORT")
+        st.title(f"PILE DESIGN REPORT: {st.session_state.proj_name}")
+        if st.session_state.socket_mode:
+            st.warning("⚠️ Calculation Method: Socket Analysis Mode (Skin friction ignored above rock)")
+        else:
+            st.info("ℹ️ Calculation Method: Full Friction Mode")
+        
         st.markdown(f"**Job No:** {st.session_state.job_no} | **Owner:** {st.session_state.owner}")
         st.markdown(f"**Consultant:** {st.session_state.consultant} | **Contractor:** {st.session_state.contractor}")
         st.markdown('<div class="section-header">1. PROJECT INFORMATION & INPUT DATA</div>', unsafe_allow_html=True)
