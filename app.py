@@ -235,8 +235,8 @@ st.sidebar.markdown(
     <div class="dev-signature" style="text-align: center; padding: 10px; border-top: 1px solid #eee; margin-top: 20px;">
         <p style="margin: 0; color: #666; font-size: 0.8em;">Developed by:</p>
             <p style="margin: 0; color: #1e3a8a; font-weight: bold; font-size: 1.1em;">Eng. Wael Radwan</p>
-            <p style="margin: 0; color: #d32f2f; font-weight: bold; font-size: 0.9em;">VERSION 2.3.1</p>
-            <p style="margin: 0; color: #999; font-size: 0.75em;">P-Delta + Ks Fix + nh Control</p>
+            <p style="margin: 0; color: #d32f2f; font-weight: bold; font-size: 0.9em;">VERSION 2.3.2</p>
+            <p style="margin: 0; color: #999; font-size: 0.75em;">P-Delta + Ks + nh + Crack Control</p>
     </div>
     """,
     unsafe_allow_html=True
@@ -731,6 +731,13 @@ with tab5:
             v_app, v_lim, shear_ok = shear_check(Ac, applied_shear, fcu, rho_prov)
             st.write(f"- Applied Shear Force (V) = {applied_shear:.1f} kN")
             st.write(f"- Shear Stress (v) = V / Ac = **{v_app:.2f} MPa** vs Limit **{v_lim:.2f} MPa**")
+            
+            # Crack control (v2.3.2) - uses improved crack_width_check from structural.py
+            clr_sp, sp_lim, sp_ok, w_est, w_lim, crack_ok = crack_width_check(
+                bar_num, bar_dia, dia, pile.cover, moment_kNm=Mmax, fcu=fcu, fy=fy
+            )
+            st.write(f"- Clear bar spacing = **{clr_sp:.1f} mm** (limit {sp_lim:.0f} mm) → {'PASS' if sp_ok else 'FAIL'}")
+            st.write(f"- Estimated crack width ≈ **{w_est:.3f} mm** (limit {w_lim:.2f} mm) → {'PASS' if crack_ok else 'CHECK'}")
 
         s_act, s_lim, s_ok = stirrup_spacing_check(dia, bar_dia, stirrup_sp)
         with st.expander("🔍 Detailed Stirrup Spacing Check", expanded=True):
@@ -744,7 +751,8 @@ with tab5:
             {"Check": "Reinforcement %", "Req": f"min {rho_req}%", "Act": f"{rho_prov:.2f}%", "Status": "✅ PASS" if rho_ok else "❌ FAIL"},
             {"Check": "Stirrup Spacing", "Req": f"< {s_lim} mm", "Act": f"{s_act} mm", "Status": "✅ PASS" if s_ok else "❌ FAIL"},
             {"Check": "Shear Stress", "Req": f"< {v_lim:.2f} MPa", "Act": f"{v_app:.2f} MPa", "Status": "✅ PASS" if shear_ok else "❌ FAIL"},
-            {"Check": "Max Displacement", "Req": f"< {allowable_deflection} mm", "Act": f"{max(y_graph):.2f} mm", "Status": "✅ PASS" if max(y_graph) <= allowable_deflection else "❌ FAIL"}
+            {"Check": "Max Displacement", "Req": f"< {allowable_deflection} mm", "Act": f"{max(y_graph):.2f} mm", "Status": "✅ PASS" if max(y_graph) <= allowable_deflection else "❌ FAIL"},
+            {"Check": "Bar Spacing (Crack)", "Req": f"< {sp_lim:.0f} mm", "Act": f"{clr_sp:.1f} mm", "Status": "✅ PASS" if sp_ok else "❌ FAIL"}
         ]
         st.table(pd.DataFrame(summary_final))
 
@@ -763,4 +771,4 @@ with tab5:
     """, unsafe_allow_html=True)
 
 st.sidebar.markdown("---")
-st.sidebar.caption("v2.3.1 - P-Delta + Ks Fix + nh Control + Settlement")
+st.sidebar.caption("v2.3.2 - Full Critical Improvements")
