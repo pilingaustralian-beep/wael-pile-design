@@ -10,7 +10,6 @@ from structural import concrete_stress_check, reinforcement_area, ultimate_axial
 from reese_matlock import moment_and_distribution
 from lateral_numerical import solve_lateral_fdm
 from visuals import draw_longitudinal_section, draw_cross_section, draw_3d_pile_model
-# from reporting import generate_pile_pdf # Removed to fix fpdf error
 import math
 import json
 import os
@@ -58,30 +57,25 @@ st.markdown("""
             height: 800px !important;
             width: 100% !important;
         }
-        /* Target the actual iframe that Streamlit uses */
         iframe {
             height: 800px !important;
             width: 100% !important;
             border: none !important;
         }
-        /* Remove all potential scrolling that cuts content */
         [data-testid="stAppViewContainer"], .main, .block-container {
             overflow: visible !important;
             height: auto !important;
         }
-        /* Style for HTML Tables in Print */
         .print-table {
             width: 100%;
             border-collapse: collapse;
             margin: 0 !important;
             margin-bottom: 10px !important;
         }
-        /* Remove Streamlit default spacing */
         .stPlotlyChart {
             margin-top: -30px !important;
             margin-bottom: -30px !important;
         }
-        /* Hide developer signature during print */
         .dev-signature {
             display: none !important;
         }
@@ -110,8 +104,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- Session State Initialization ---
-
 # --- 1. Session State Initialization ---
 initial_values = {
     "proj_name": "تصميم بايل",
@@ -133,23 +125,22 @@ initial_values = {
     "bar_num": 6,
     "stirrup_dia": 8,
     "stirrup_sp": 150,
-    # Updated layers_df based on the provided JSON
     "layers_df": pd.DataFrame([
         {"Name": "Fill", "Type": "رمل", "Top Depth": 0.0, "Bottom Depth": 2.0, "Gamma": 17.0, "Phi/Cu/quc": 28.0, "Nq/Alpha/Nc": 50.0, "Es": 15000.0, "alpha_rock": np.nan, "RQD": np.nan},
         {"Name": "Medium Clay", "Type": "طين", "Top Depth": 2.0, "Bottom Depth": 5.0, "Gamma": 18.0, "Phi/Cu/quc": 60.0, "Nq/Alpha/Nc": 0.65, "Es": 18000.0, "alpha_rock": 0.4, "RQD": 0.5},
         {"Name": "Medium Hard Rock", "Type": "صخر", "Top Depth": 5.0, "Bottom Depth": 30.0, "Gamma": 24.5, "Phi/Cu/quc": 25.0, "Nq/Alpha/Nc": 30.0, "Es": 25000.0, "alpha_rock": 0.4, "RQD": 0.7}
     ]),
     "socket_mode": True,
-    "fos_geotech": 2.5
+    "fos_geotech": 2.5,
+    "nh": 5.0   # NEW: Subgrade modulus (MN/m³)
 }
 
 for key, val in initial_values.items():
     if key not in st.session_state:
         st.session_state[key] = val
 
-# --- 2. Helper Functions ---\
+# --- 2. Helper Functions ---
 def sync_data(data):
-    # Mapping of JSON keys to session_state keys
     if "project" in data:
         st.session_state.proj_name = data["project"].get("name", initial_values["proj_name"])
         st.session_state.job_no = data["project"].get("job_no", initial_values["job_no"])
@@ -159,7 +150,7 @@ def sync_data(data):
     if "settings" in data:
         st.session_state.socket_mode = data["settings"].get("socket_mode", False)
         st.session_state.fos_geotech = data["settings"].get("fos_geotech", 2.5)
-    
+        st.session_state.nh = data["settings"].get("nh", 5.0)
     if "geometry" in data:
         st.session_state.dia = float(data["geometry"].get("dia", initial_values["dia"]))
         st.session_state.length = float(data["geometry"].get("length", initial_values["length"]))
@@ -179,7 +170,6 @@ def sync_data(data):
         st.session_state.stirrup_sp = int(data["reinf"].get("stirrup_sp", initial_values["stirrup_sp"]))
     if "layers" in data:
         st.session_state.layers_df = pd.DataFrame(data["layers"])
-        # CRITICAL: Clear the data_editor state to force it to reload the new dataframe
         if "soil_editor" in st.session_state:
             del st.session_state["soil_editor"]
 
@@ -203,7 +193,7 @@ def get_download_data():
         "geometry": {"dia": st.session_state.dia, "length": st.session_state.length, "cut_off": st.session_state.cut_off, "ground_lvl": st.session_state.ground_lvl, "gwt": st.session_state.gwt},
         "loads": {"p_vertical": st.session_state.p_vertical, "p_horizontal": st.session_state.p_horizontal, "allowable_deflection": st.session_state.allowable_deflection, "fcu": st.session_state.fcu, "fy": st.session_state.fy},
         "reinf": {"bar_dia": st.session_state.bar_dia, "bar_num": st.session_state.bar_num, "stirrup_dia": st.session_state.stirrup_dia, "stirrup_sp": st.session_state.stirrup_sp},
-        "settings": {"socket_mode": st.session_state.socket_mode, "fos_geotech": st.session_state.fos_geotech},
+        "settings": {"socket_mode": st.session_state.socket_mode, "fos_geotech": st.session_state.fos_geotech, "nh": st.session_state.nh},
         "layers": st.session_state.layers_df.to_dict(orient="records")
     }
     return json.dumps(data, indent=4)
@@ -221,6 +211,7 @@ st.sidebar.divider()
 st.sidebar.subheader("⚙️ Global Design Options")
 st.sidebar.checkbox("Socket Analysis Mode", key="socket_mode", help="Ignore skin friction for all layers above the first rock layer.")
 st.sidebar.number_input("Geotech Factor of Safety (FoS)", 1.5, 5.0, key="fos_geotech")
+st.sidebar.number_input("Subgrade Modulus nh (MN/m³)", 0.5, 50.0, key="nh", help="Used in lateral analysis for sand. Typical values: 2-5 (loose), 5-15 (medium), 15-40 (dense)")
 
 st.sidebar.divider()
 st.sidebar.text_input("Project Name", key="proj_name")
@@ -244,8 +235,8 @@ st.sidebar.markdown(
     <div class="dev-signature" style="text-align: center; padding: 10px; border-top: 1px solid #eee; margin-top: 20px;">
         <p style="margin: 0; color: #666; font-size: 0.8em;">Developed by:</p>
             <p style="margin: 0; color: #1e3a8a; font-weight: bold; font-size: 1.1em;">Eng. Wael Radwan</p>
-            <p style="margin: 0; color: #d32f2f; font-weight: bold; font-size: 0.9em;">VERSION 2.3 - P-Delta + Fixes</p>
-            <p style="margin: 0; color: #999; font-size: 0.75em;">Pile Design Suite - Pro Edition</p>
+            <p style="margin: 0; color: #d32f2f; font-weight: bold; font-size: 0.9em;">VERSION 2.3.1</p>
+            <p style="margin: 0; color: #999; font-size: 0.75em;">P-Delta + Ks Fix + nh Control</p>
     </div>
     """,
     unsafe_allow_html=True
@@ -320,16 +311,13 @@ with tab2:
             st.session_state.layers_df = pd.concat([st.session_state.layers_df, pd.DataFrame([new_row])], ignore_index=True)
             st.rerun()
 
-    st.info("💡 Tip: You can edit values directly in the table.")
-    # We use a unique key and clear it during sync_data to ensure it reloads the dataframe
+    st.info("💡 Tip: You can edit values directly in the table. RQD can be entered as 0.85 or 85.")
     edited_df = st.data_editor(st.session_state.layers_df, num_rows="dynamic", use_container_width=True, key="soil_editor")
-    # Only update if there's a real change to avoid double-refresh bugs
     if not edited_df.equals(st.session_state.layers_df):
         st.session_state.layers_df = edited_df
         st.rerun()
 
     st.subheader("🔢 SPT Integration (Automation)")
-    st.info("ℹ️ **RQD Note:** Enter RQD as a decimal (e.g., 0.85 for 85%).")
     c_spt1, c_spt2, c_spt3 = st.columns(3)
     spt_n = c_spt1.number_input("SPT N-Value", 0, 100, 20)
     spt_type = c_spt2.selectbox("Calculate for", ["Sand", "Clay"])
@@ -402,7 +390,6 @@ with tab3:
             st.error(f"Error reading file: {e}")
 
 with tab4:
-    # Always pull latest from session state for analysis
     dia = st.session_state.dia
     length = st.session_state.length
     cut_off = st.session_state.cut_off
@@ -422,39 +409,52 @@ with tab4:
     if st.session_state.socket_mode:
         st.warning("⚠️ Socket Analysis Mode is ACTIVE.")
     
+    # Basic validation
+    validation_warnings = []
+    if dia < 300 or dia > 3000:
+        validation_warnings.append("Diameter outside typical range (300-3000 mm)")
+    if length < 3:
+        validation_warnings.append("Pile length is very short")
+    if p_vertical <= 0:
+        validation_warnings.append("Vertical load is zero or negative")
+    if fcu < 20 or fcu > 100:
+        validation_warnings.append("Concrete grade outside common range")
+    if validation_warnings:
+        for w in validation_warnings:
+            st.warning(f"⚠️ {w}")
+    
     pile = PileGeometry(diameter=dia, pile_length=length, cut_off_level=cut_off, ground_level=ground_lvl, gwt_level=gwt)
     loads = Loads(working_vertical=p_vertical, horizontal=p_horizontal)
-    options = DesignOptions(fcu=fcu, fy=fy, E_concrete=get_concrete_modulus(fcu), fos_geotech=st.session_state.fos_geotech)
+    options = DesignOptions(
+        fcu=fcu, 
+        fy=fy, 
+        E_concrete=get_concrete_modulus(fcu), 
+        fos_geotech=st.session_state.fos_geotech,
+        nh=st.session_state.nh
+    )
     reinf = Reinforcement(bar_diameter=bar_dia, num_bars=bar_num, stirrup_diameter=stirrup_dia, stirrup_spacing=stirrup_sp)
     
     layers = []
     socket_mode = st.session_state.socket_mode
-    
     first_rock_found = False
-    # Ensure edited_df is used here if it exists, otherwise fallback to session state
+    
     try:
         current_layers_df = st.session_state.layers_df
     except:
-        current_layers_df = pd.DataFrame(initial_values["layers_df"]) # Fallback if session state is lost
+        current_layers_df = pd.DataFrame(initial_values["layers_df"])
 
     for _, row in current_layers_df.iterrows():
         if row["Type"] == "رمل": stype = SoilType.SAND
         elif row["Type"] == "طين": stype = SoilType.CLAY
         else: stype = SoilType.ROCK
         
-                # Socket Mode Logic - Corrected
-        ignore_friction = False # Default to False
+        ignore_friction = False
         if socket_mode:
             if stype == SoilType.ROCK:
-                first_rock_found = True # Mark that we've hit rock
-            
-            # Only apply ignore_friction if we are in socket mode AND we haven't hit rock yet
+                first_rock_found = True
             if not first_rock_found: 
                 ignore_friction = True 
-        # If socket_mode is False, ignore_friction remains False (default) 
 
-        
-        # Robust RQD handling
         RQD_raw = row.get("RQD")
         if pd.isna(RQD_raw):
             RQD_final = 0.5
@@ -465,17 +465,12 @@ with tab4:
             except:
                 RQD_final = 0.5
         
-        # --- Fixed Ks calculation (v2.3) ---
-        # Previously Ks was incorrectly set to Nq value. Now we estimate a reasonable Ks.
         if stype == SoilType.SAND:
             phi_val = float(row["Phi/Cu/quc"]) if pd.notna(row.get("Phi/Cu/quc")) else 30.0
-            # Approximate active earth pressure coefficient (simplified Rankine)
-            # Ks is typically between 0.3 and 1.0 for piles
             Ks_val = max(0.3, min(1.0, 1.0 - math.sin(math.radians(phi_val))))
         else:
             Ks_val = 1.0
 
-        # Comprehensive float conversion to prevent NoneType errors
         layer = SoilLayer(
             name=str(row.get("Name", "Layer")), 
             soil_type=stype, 
@@ -494,10 +489,8 @@ with tab4:
             Nc=float(row["Nq/Alpha/Nc"]) if stype != SoilType.SAND and pd.notna(row.get("Nq/Alpha/Nc")) else 9.0,
             Ks=Ks_val
         )
-
         layers.append(layer)
     
-    # Ensure layers list is not empty before proceeding
     if not layers:
         st.error("No soil layers defined. Please add soil layers in the 'Soil Profile' tab.")
     else:
@@ -516,7 +509,6 @@ with tab4:
         else:
             z_graph, y_graph, moments, shears, Mmax = solve_lateral_fdm(pile, layers, loads, options)
             m_graph, y_graph, v_graph = moments.tolist(), y_graph.tolist(), shears.tolist()
-            # Determine if we use T (Sand) or R (Clay) based on the first layer
             main_type = layers[0].soil_type if layers else SoilType.SAND
             D_m = dia/1000.0
             I_m4 = math.pi * D_m**4 / 64.0
@@ -524,24 +516,21 @@ with tab4:
             
             if main_type == SoilType.CLAY:
                 label_stiff = "Characteristic Length (R)"
-                # R = (EI / k)^0.25, where k is subgrade modulus (approx 0.2*Cu*100)
-                k_val = layers[0].Cu * 20 # Simplified k from Cu
+                k_val = layers[0].Cu * 20
                 T_val = (EI / (k_val if k_val > 0 else 1.0))**0.25
             else:
                 label_stiff = "Stiffness Factor (T)"
                 T_val = (EI / (options.nh if options.nh > 0 else 1.0))**0.2
 
-        # Now calculate required reinforcement after Mmax is available
         rho_prov, rho_req, rho_ok = min_reinforcement_check(Ac, Asc, dia, p_vertical, Mmax, fcu, fy)
 
         m1, m2, m3, m4 = st.columns(4)
-        # Safely access results, provide defaults if keys are missing
-        m1.metric("Geotech FoS", f"{geo_res.get('FoS', 0):.2f}", delta="Safe" if geo_res.get('FoS', 0) >= 3 else "Unsafe")
+        m1.metric("Geotech FoS", f"{geo_res.get('FoS', 0):.2f}", delta="Safe" if geo_res.get('FoS', 0) >= st.session_state.fos_geotech else "Unsafe")
         m2.metric("Safe Comp (kN)", f"{geo_res.get('Qall', 0):.0f}")
         m3.metric("Safe Tens (kN)", f"{geo_res.get('Qall_tens', 0):.0f}")
         m4.metric("Settlement (mm)", f"{geo_res.get('Settlement', 0):.1f}")
 
-        st.info(f"ℹ️ **Engineering Note:** Analysis includes **Groundwater Table** effects at {gwt}m and **Critical Depth** (z_c = {15*dia/1000:.1f}m) for skin friction and end bearing. Numerical method now includes **P-Δ effect**.")
+        st.info(f"ℹ️ **Engineering Note:** Includes GWT effects, Critical Depth (z_c = {15*dia/1000:.1f}m), **P-Δ effect** in numerical method, and user-defined nh = {st.session_state.nh} MN/m³.")
 
         st.write("---")
         st.subheader("Visual Analysis")
@@ -589,7 +578,6 @@ with tab5:
         st.markdown(f"**Consultant:** {st.session_state.consultant} | **Contractor:** {st.session_state.contractor}")
         st.markdown('<div class="section-header">1. PROJECT INFORMATION & INPUT DATA</div>', unsafe_allow_html=True)
         
-        # Project Info Table
         proj_html = f"""
         <table class="print-table">
             <tr><th>Project Name</th><td>{st.session_state.proj_name}</td><th>Job Number</th><td>{st.session_state.job_no}</td></tr>
@@ -609,20 +597,19 @@ with tab5:
                 <tr><th>Concrete fcu</th><td>{fcu} MPa</td></tr>
                 <tr><th>Steel fy</th><td>{fy} MPa</td></tr>
                 <tr><th>Factor of Safety</th><td>{options.fos_geotech}</td></tr>
+                <tr><th>nh (Subgrade)</th><td>{options.nh} MN/m³</td></tr>
             </table>
             """
             st.markdown(param_html, unsafe_allow_html=True)
         with col_in2:
             st.markdown("**Soil Stratigraphy**")
             soil_html = "<table class='print-table'><tr><th>Name</th><th>Type</th><th>Top (m)</th><th>Base (m)</th><th>γ (kN/m³)</th></tr>"
-            # Use the potentially updated session state layers_df
             for _, r in st.session_state.layers_df.iterrows():
                 soil_html += f"<tr><td>{r['Name']}</td><td>{r['Type']}</td><td>{r['Top Depth']}</td><td>{r['Bottom Depth']}</td><td>{r['Gamma']}</td></tr>"
             soil_html += "</table>"
             st.markdown(soil_html, unsafe_allow_html=True)
 
         st.markdown("**Schematics**")
-        # Added a page break here if needed, or just keep together
         st.markdown('<div class="print-page-break"></div>', unsafe_allow_html=True)
         c_rep_sch1, c_rep_sch2 = st.columns([1.5, 1])
         with c_rep_sch1: st.plotly_chart(draw_longitudinal_section(pile, layers, reinf), use_container_width=True, key="sch_long_report")
@@ -637,7 +624,6 @@ with tab5:
         
         with st.expander("📝 Detailed Geotechnical Calculations", expanded=True):
             st.markdown("**A. Shaft Friction (Qs):**")
-            # Use .get() for safety in case keys are missing
             st.markdown(f"Total Effective Shaft Area = π * D * L_eff = π * {pile.diameter/1000} * {geo_res.get('L_eff', 0):.2f} = **{geo_res.get('As_eff', 0):.2f} m²**")
             if "Segments" in geo_res and isinstance(geo_res["Segments"], list):
                  st.table(pd.DataFrame(geo_res["Segments"]))
@@ -660,10 +646,12 @@ with tab5:
             st.write(f"- Safe Tension (Qall_t) = Qu_t / (FoS_geo * 1.5) = **{geo_res.get('Qall_tens', 0):.2f} kN**")
             
             st.markdown("---")
-            st.markdown("**E. Settlement Analysis (Serviceability):**")
-            st.write(f"- Estimated Total Settlement (St) = **{geo_res.get('Settlement', 0):.2f} mm**")
-            st.write(f"- *Method:* Simplified Elastic (Poulos & Davis)")
-            st.write(f"- Components: s1 (Elastic shortening) + s2 (Tip settlement)")
+            st.markdown("**E. Settlement Analysis (Serviceability) - Improved v2.3:**")
+            st.write(f"- **Total Settlement (St) = {geo_res.get('Settlement', 0):.2f} mm**")
+            st.write(f"  - s1 (Elastic shortening) = {geo_res.get('Settlement_s1', 0):.2f} mm")
+            st.write(f"  - s2 (Tip settlement) = {geo_res.get('Settlement_s2', 0):.2f} mm")
+            st.write(f"  - s3 (Shaft contribution) = {geo_res.get('Settlement_s3', 0):.2f} mm")
+            st.write(f"- Average Es used = {geo_res.get('avg_Es', 0):.0f} kPa")
 
         st.markdown("**Lateral Performance Curves**")
         with st.expander("🔬 Lateral Analysis Technical Note"):
@@ -676,13 +664,13 @@ with tab5:
             st.markdown(f"""
             **Adopted Parameters:**
             - **Concrete Modulus ($E_c$):** {Ec_mpa/1000:.1f} GN/m²
-            - **Subgrade Modulus ($n_h$):** {options.nh} MN/m³
+            - **Subgrade Modulus ($n_h$):** {options.nh} MN/m³ (user-defined)
             - **Moment of Inertia ($I$):** {I_m4:.4f} m⁴
             - **Flexural Rigidity ($EI$):** {EI_val:.1f} kN.m²
             
-            **Difference between methods:**
-            - **Simplified (Reese-Matlock):** Uses analytical coefficients derived for a linearly increasing soil modulus.
-            - **Numerical (Finite Difference):** Solves the differential equation by discretizing the pile into nodes **including P-Δ effect**.
+            **Methods:**
+            - **Simplified (Reese-Matlock):** Analytical coefficients for linearly increasing soil modulus.
+            - **Numerical (Finite Difference):** Includes **P-Δ effect** and improved soil stiffness model.
             """)
         g_rep1, g_rep2, g_rep3 = st.columns(3)
         with g_rep1:
@@ -702,7 +690,6 @@ with tab5:
                 "Shear (kN)": v_graph,
                 "Disp (mm)": y_graph
             })
-            # Sample every 10th row if it's FDM (200 rows)
             if len(lat_df) > 30:
                 lat_df_sampled = lat_df.iloc[::10].copy()
                 lat_df_sampled = pd.concat([lat_df_sampled, lat_df.tail(1)]).drop_duplicates()
@@ -730,9 +717,8 @@ with tab5:
             st.markdown("**C. Reinforcement Requirement Analysis:**")
             st.write(f"- Absolute Code Minimum Ratio (ρ_min) = **0.40%**")
             
-            # Consistent formulas with structural.py
-            as_m_req = (abs(Mmax) * 10**6) / (0.87 * fy * 0.7 * dia) if dia > 0 else 0 # Avoid division by zero
-            as_n_req = ((p_vertical * 1000) - (0.4 * fcu * Ac)) / (0.75 * fy) if fy > 0 else 0 # Avoid division by zero
+            as_m_req = (abs(Mmax) * 10**6) / (0.87 * fy * 0.7 * dia) if dia > 0 else 0
+            as_n_req = ((p_vertical * 1000) - (0.4 * fcu * Ac)) / (0.75 * fy) if fy > 0 else 0
             
             st.latex(r"As_{moment} = \frac{M_{max}}{0.87 \cdot f_y \cdot 0.7 \cdot h} = " + f"{max(as_m_req, 0):.0f} " + r"mm^2")
             st.latex(r"As_{axial} = \frac{N - 0.4 \cdot f_{cu} \cdot A_c}{0.75 \cdot f_y} = " + f"{max(as_n_req, 0):.0f} " + r"mm^2")
@@ -741,7 +727,6 @@ with tab5:
             st.write(f"- Required Ratio (ρ_req) = **{rho_req:.2f}%** | Provided Ratio (ρ_prov) = **{rho_prov:.2f}%**")
             
             st.markdown("**D. Shear & Cracking:**")
-            # Calculate applied shear more robustly
             applied_shear = p_horizontal if p_horizontal > 0 else (0.03 * p_vertical if p_vertical > 0 else 0)
             v_app, v_lim, shear_ok = shear_check(Ac, applied_shear, fcu, rho_prov)
             st.write(f"- Applied Shear Force (V) = {applied_shear:.1f} kN")
@@ -763,8 +748,6 @@ with tab5:
         ]
         st.table(pd.DataFrame(summary_final))
 
-        # PDF download button removed
-
     st.markdown("""
         <style>
         @media print {
@@ -780,4 +763,4 @@ with tab5:
     """, unsafe_allow_html=True)
 
 st.sidebar.markdown("---")
-st.sidebar.caption("v2.3 - P-Delta + Ks Fix")
+st.sidebar.caption("v2.3.1 - P-Delta + Ks Fix + nh Control + Settlement")
