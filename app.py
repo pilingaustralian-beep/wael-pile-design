@@ -244,7 +244,7 @@ st.sidebar.markdown(
     <div class="dev-signature" style="text-align: center; padding: 10px; border-top: 1px solid #eee; margin-top: 20px;">
         <p style="margin: 0; color: #666; font-size: 0.8em;">Developed by:</p>
             <p style="margin: 0; color: #1e3a8a; font-weight: bold; font-size: 1.1em;">Eng. Wael Radwan</p>
-            <p style="margin: 0; color: #d32f2f; font-weight: bold; font-size: 0.9em;">VERSION 2.1 - UPDATED</p>
+            <p style="margin: 0; color: #d32f2f; font-weight: bold; font-size: 0.9em;">VERSION 2.3 - P-Delta + Fixes</p>
             <p style="margin: 0; color: #999; font-size: 0.75em;">Pile Design Suite - Pro Edition</p>
     </div>
     """,
@@ -465,6 +465,16 @@ with tab4:
             except:
                 RQD_final = 0.5
         
+        # --- Fixed Ks calculation (v2.3) ---
+        # Previously Ks was incorrectly set to Nq value. Now we estimate a reasonable Ks.
+        if stype == SoilType.SAND:
+            phi_val = float(row["Phi/Cu/quc"]) if pd.notna(row.get("Phi/Cu/quc")) else 30.0
+            # Approximate active earth pressure coefficient (simplified Rankine)
+            # Ks is typically between 0.3 and 1.0 for piles
+            Ks_val = max(0.3, min(1.0, 1.0 - math.sin(math.radians(phi_val))))
+        else:
+            Ks_val = 1.0
+
         # Comprehensive float conversion to prevent NoneType errors
         layer = SoilLayer(
             name=str(row.get("Name", "Layer")), 
@@ -482,7 +492,7 @@ with tab4:
             Nq=float(row["Nq/Alpha/Nc"]) if stype == SoilType.SAND and pd.notna(row.get("Nq/Alpha/Nc")) else 100.0,
             alpha=float(row["Nq/Alpha/Nc"]) if stype == SoilType.CLAY and pd.notna(row.get("Nq/Alpha/Nc")) else 0.5,
             Nc=float(row["Nq/Alpha/Nc"]) if stype != SoilType.SAND and pd.notna(row.get("Nq/Alpha/Nc")) else 9.0,
-            Ks=float(row["Nq/Alpha/Nc"]) if stype == SoilType.SAND and pd.notna(row.get("Nq/Alpha/Nc")) else 1.0
+            Ks=Ks_val
         )
 
         layers.append(layer)
@@ -531,7 +541,7 @@ with tab4:
         m3.metric("Safe Tens (kN)", f"{geo_res.get('Qall_tens', 0):.0f}")
         m4.metric("Settlement (mm)", f"{geo_res.get('Settlement', 0):.1f}")
 
-        st.info(f"ℹ️ **Engineering Note:** Analysis includes **Groundwater Table** effects at {gwt}m and **Critical Depth** (z_c = {15*dia/1000:.1f}m) for skin friction and end bearing.")
+        st.info(f"ℹ️ **Engineering Note:** Analysis includes **Groundwater Table** effects at {gwt}m and **Critical Depth** (z_c = {15*dia/1000:.1f}m) for skin friction and end bearing. Numerical method now includes **P-Δ effect**.")
 
         st.write("---")
         st.subheader("Visual Analysis")
@@ -657,8 +667,8 @@ with tab5:
 
         st.markdown("**Lateral Performance Curves**")
         with st.expander("🔬 Lateral Analysis Technical Note"):
-            st.info("**Governing Equation:**")
-            st.latex(r"EI \frac{d^4y}{dz^4} + E_s(z) y = 0")
+            st.info("**Governing Equation (with P-Δ):**")
+            st.latex(r"EI \frac{d^4y}{dz^4} + P \frac{d^2y}{dz^2} + E_s(z) y = 0")
             D_m = dia/1000.0
             I_m4 = math.pi * D_m**4 / 64.0
             Ec_mpa = get_concrete_modulus(fcu)
@@ -672,7 +682,7 @@ with tab5:
             
             **Difference between methods:**
             - **Simplified (Reese-Matlock):** Uses analytical coefficients derived for a linearly increasing soil modulus.
-            - **Numerical (Finite Difference):** Solves the differential equation by discretizing the pile into nodes.
+            - **Numerical (Finite Difference):** Solves the differential equation by discretizing the pile into nodes **including P-Δ effect**.
             """)
         g_rep1, g_rep2, g_rep3 = st.columns(3)
         with g_rep1:
@@ -770,4 +780,4 @@ with tab5:
     """, unsafe_allow_html=True)
 
 st.sidebar.markdown("---")
-st.sidebar.caption("v2.2-Stable Edition")
+st.sidebar.caption("v2.3 - P-Delta + Ks Fix")
