@@ -132,7 +132,8 @@ initial_values = {
     ]),
     "socket_mode": True,
     "fos_geotech": 2.5,
-    "nh": 5.0   # NEW: Subgrade modulus (MN/m³)
+    "nh": 5.0,   # Subgrade modulus (MN/m³)
+    "rock_method_ui": "Rosenberg & Journeaux"
 }
 
 for key, val in initial_values.items():
@@ -209,9 +210,15 @@ if uploaded_file:
 
 st.sidebar.divider()
 st.sidebar.subheader("⚙️ Global Design Options")
-st.sidebar.checkbox("Socket Analysis Mode", key="socket_mode", help="Ignore skin friction for all layers above the first rock layer.")
-st.sidebar.number_input("Geotech Factor of Safety (FoS)", 1.5, 5.0, key="fos_geotech")
-st.sidebar.number_input("Subgrade Modulus nh (MN/m³)", 0.5, 50.0, key="nh", help="Used in lateral analysis for sand. Typical values: 2-5 (loose), 5-15 (medium), 15-40 (dense)")
+st.sidebar.checkbox("Socket Analysis Mode", key="socket_mode", help="Ignore skin friction for all layers above the first rock layer. Use for rock-socketed piles.")
+st.sidebar.number_input("Geotech Factor of Safety (FoS)", 1.5, 5.0, key="fos_geotech", help="Typical 2.0–3.0 for bored piles (compression).")
+st.sidebar.number_input("Subgrade Modulus nh (MN/m³)", 0.5, 50.0, key="nh", help="Lateral analysis for sand. Typical: 2–5 loose, 5–15 medium, 15–40 dense.")
+st.sidebar.selectbox(
+    "Rock Socket Method",
+    ["Rosenberg & Journeaux", "Williams & Pells", "Simple Adhesion (α)"],
+    key="rock_method_ui",
+    help="Method for rock side friction in socket layers."
+)
 
 st.sidebar.divider()
 st.sidebar.text_input("Project Name", key="proj_name")
@@ -235,8 +242,8 @@ st.sidebar.markdown(
     <div class="dev-signature" style="text-align: center; padding: 10px; border-top: 1px solid #eee; margin-top: 20px;">
         <p style="margin: 0; color: #666; font-size: 0.8em;">Developed by:</p>
             <p style="margin: 0; color: #1e3a8a; font-weight: bold; font-size: 1.1em;">Eng. Wael Radwan</p>
-            <p style="margin: 0; color: #d32f2f; font-weight: bold; font-size: 0.9em;">VERSION 2.3.2</p>
-            <p style="margin: 0; color: #999; font-size: 0.75em;">P-Delta + Ks + nh + Crack Control</p>
+            <p style="margin: 0; color: #d32f2f; font-weight: bold; font-size: 0.9em;">VERSION 2.4</p>
+            <p style="margin: 0; color: #999; font-size: 0.75em;">Rock Methods + Validation + Tooltips</p>
     </div>
     """,
     unsafe_allow_html=True
@@ -249,18 +256,18 @@ with tab1:
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("Pile Geometry")
-        st.number_input("Diameter (mm)", 300, 3000, key="dia")
-        st.number_input("Pile Length (m)", 5.0, 100.0, key="length")
-        st.number_input("Cut-off Level (m)", -50.0, 50.0, key="cut_off")
-        st.number_input("Ground Level (m)", -50.0, 50.0, key="ground_lvl")
-        st.number_input("Water Table (m)", -100.0, 50.0, key="gwt")
+        st.number_input("Diameter (mm)", 300, 3000, key="dia", help="Pile diameter in mm (typical bored piles 400–1500 mm).")
+        st.number_input("Pile Length (m)", 5.0, 100.0, key="length", help="Total pile length from cut-off to toe.")
+        st.number_input("Cut-off Level (m)", -50.0, 50.0, key="cut_off", help="Elevation of pile top (cut-off). Negative = below datum.")
+        st.number_input("Ground Level (m)", -50.0, 50.0, key="ground_lvl", help="Ground surface elevation (same datum as cut-off/GWT).")
+        st.number_input("Water Table (m)", -100.0, 50.0, key="gwt", help="Groundwater table elevation. Affects effective stress.")
     with col2:
         st.subheader("Loads & Materials")
-        st.number_input("Working Vertical Load (kN)", 0.0, 50000.0, key="p_vertical")
-        st.number_input("Horizontal Load (kN) [0 for auto 3%]", 0.0, 5000.0, key="p_horizontal")
-        st.number_input("Allowable Lateral Deflection (mm)", 1.0, 100.0, key="allowable_deflection")
-        st.number_input("Concrete Grade fcu (N/mm²)", 20.0, 100.0, key="fcu")
-        st.number_input("Steel Grade fy (N/mm²)", 250.0, 600.0, key="fy")
+        st.number_input("Working Vertical Load (kN)", 0.0, 50000.0, key="p_vertical", help="Service (working) axial load used for FoS and settlement.")
+        st.number_input("Horizontal Load (kN) [0 for auto 3%]", 0.0, 5000.0, key="p_horizontal", help="If 0, program uses 3% of vertical load for lateral analysis.")
+        st.number_input("Allowable Lateral Deflection (mm)", 1.0, 100.0, key="allowable_deflection", help="Serviceability limit for pile head deflection.")
+        st.number_input("Concrete Grade fcu (N/mm²)", 20.0, 100.0, key="fcu", help="Characteristic cube strength (e.g. 40 MPa).")
+        st.number_input("Steel Grade fy (N/mm²)", 250.0, 600.0, key="fy", help="Reinforcement yield strength (e.g. 460 MPa).")
     
     st.subheader("Geotechnical Summary")
     if st.session_state.socket_mode:
@@ -409,19 +416,59 @@ with tab4:
     if st.session_state.socket_mode:
         st.warning("⚠️ Socket Analysis Mode is ACTIVE.")
     
-    # Basic validation
+    # Stronger input validation (v2.4)
+    validation_errors = []
     validation_warnings = []
-    if dia < 300 or dia > 3000:
+    if dia <= 0:
+        validation_errors.append("Diameter must be > 0")
+    elif dia < 300 or dia > 3000:
         validation_warnings.append("Diameter outside typical range (300-3000 mm)")
-    if length < 3:
-        validation_warnings.append("Pile length is very short")
-    if p_vertical <= 0:
-        validation_warnings.append("Vertical load is zero or negative")
-    if fcu < 20 or fcu > 100:
-        validation_warnings.append("Concrete grade outside common range")
-    if validation_warnings:
-        for w in validation_warnings:
-            st.warning(f"⚠️ {w}")
+    if length <= 0:
+        validation_errors.append("Pile length must be > 0")
+    elif length < 3:
+        validation_warnings.append("Pile length is very short (< 3 m)")
+    if p_vertical < 0:
+        validation_errors.append("Vertical load cannot be negative")
+    elif p_vertical == 0:
+        validation_warnings.append("Vertical load is zero — capacities will show FoS as N/A")
+    if p_horizontal < 0:
+        validation_errors.append("Horizontal load cannot be negative")
+    if fcu <= 0:
+        validation_errors.append("Concrete grade fcu must be > 0")
+    elif fcu < 20 or fcu > 100:
+        validation_warnings.append("Concrete grade outside common range (20-100 MPa)")
+    if fy <= 0:
+        validation_errors.append("Steel grade fy must be > 0")
+    if bar_num < 4:
+        validation_warnings.append("Number of bars < 4 (code minimum often 4)")
+    if bar_dia <= 0 or stirrup_dia <= 0 or stirrup_sp <= 0:
+        validation_errors.append("Reinforcement sizes/spacing must be > 0")
+    if st.session_state.fos_geotech <= 0:
+        validation_errors.append("Geotech FoS must be > 0")
+    if st.session_state.nh <= 0:
+        validation_errors.append("Subgrade modulus nh must be > 0")
+    # Layer checks
+    try:
+        df_chk = st.session_state.layers_df
+        if df_chk is None or len(df_chk) == 0:
+            validation_errors.append("No soil layers defined")
+        else:
+            for idx, r in df_chk.iterrows():
+                top = float(r["Top Depth"]) if pd.notna(r.get("Top Depth")) else 0
+                bot = float(r["Bottom Depth"]) if pd.notna(r.get("Bottom Depth")) else 0
+                if bot <= top:
+                    validation_errors.append(f"Layer '{r.get('Name', idx)}': Bottom depth must be > Top depth")
+                g = float(r["Gamma"]) if pd.notna(r.get("Gamma")) else 0
+                if g <= 0:
+                    validation_warnings.append(f"Layer '{r.get('Name', idx)}': unit weight γ ≤ 0")
+    except Exception:
+        pass
+    for e in validation_errors:
+        st.error(f"❌ {e}")
+    for w in validation_warnings:
+        st.warning(f"⚠️ {w}")
+    if validation_errors:
+        st.stop()
     
     pile = PileGeometry(diameter=dia, pile_length=length, cut_off_level=cut_off, ground_level=ground_lvl, gwt_level=gwt)
     loads = Loads(working_vertical=p_vertical, horizontal=p_horizontal)
@@ -471,6 +518,15 @@ with tab4:
         else:
             Ks_val = 1.0
 
+        # Map UI rock method to enum
+        rm_ui = st.session_state.get("rock_method_ui", "Rosenberg & Journeaux")
+        if "Williams" in rm_ui:
+            rock_m = RockMethod.WILLIAMS_PELLS
+        elif "Adhesion" in rm_ui or "التصاق" in rm_ui:
+            rock_m = RockMethod.ADHESION
+        else:
+            rock_m = RockMethod.ROSENBERG_JOURNEAUX
+
         layer = SoilLayer(
             name=str(row.get("Name", "Layer")), 
             soil_type=stype, 
@@ -487,7 +543,8 @@ with tab4:
             Nq=float(row["Nq/Alpha/Nc"]) if stype == SoilType.SAND and pd.notna(row.get("Nq/Alpha/Nc")) else 100.0,
             alpha=float(row["Nq/Alpha/Nc"]) if stype == SoilType.CLAY and pd.notna(row.get("Nq/Alpha/Nc")) else 0.5,
             Nc=float(row["Nq/Alpha/Nc"]) if stype != SoilType.SAND and pd.notna(row.get("Nq/Alpha/Nc")) else 9.0,
-            Ks=Ks_val
+            Ks=Ks_val,
+            rock_method=rock_m
         )
         layers.append(layer)
     
@@ -771,4 +828,4 @@ with tab5:
     """, unsafe_allow_html=True)
 
 st.sidebar.markdown("---")
-st.sidebar.caption("v2.3.2 - Full Critical Improvements")
+st.sidebar.caption("v2.4 - Rock Methods + Validation + Tooltips")
