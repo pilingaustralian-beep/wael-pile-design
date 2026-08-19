@@ -4,13 +4,43 @@ from inputs import SoilType, RockMethod, SoilLayer, PileGeometry, Loads, DesignO
 from utils import deg2rad
 
 
+def _rock_skin_friction(layer: SoilLayer, quc_kpa: float, beta_q: float):
+    """
+    Rock socket side friction according to selected method.
+    Returns (fs_kPa, note_string)
+    """
+    method = getattr(layer, "rock_method", RockMethod.ROSENBERG_JOURNEAUX)
+    alpha = layer.rock_reduction_factor
+
+    if method == RockMethod.ADHESION:
+        # Simple adhesion: fs = alpha * quc (with RQD reduction)
+        fs = alpha * quc_kpa * beta_q
+        note = f"fs (Adhesion) = alpha({alpha}) * quc * beta_rqd({beta_q}) = {fs:.2f} kPa"
+        return fs, note
+
+    if method == RockMethod.WILLIAMS_PELLS:
+        # Williams & Pells (approx): fs = alpha * sqrt(quc) style / empirical
+        # Common practical form: fs = 0.05 * quc to 0.1*quc depending on rock quality
+        # Using: fs = alpha * 0.1 * quc * beta_q (conservative for sockets)
+        fs = alpha * 0.1 * quc_kpa * beta_q
+        note = f"fs (Williams&Pells) = alpha({alpha}) * 0.1 * quc * beta_rqd({beta_q}) = {fs:.2f} kPa"
+        return fs, note
+
+    # Default: Rosenberg & Journeaux / weak vs hard split
+    if quc_kpa < 5000:
+        fs = alpha * 0.5 * quc_kpa * beta_q
+        note = f"fs (Rosenberg weak) = alpha({alpha}) * 0.5 * quc * beta_rqd({beta_q}) = {fs:.2f} kPa"
+    else:
+        fs = 0.05 * quc_kpa * beta_q
+        note = f"fs (Rosenberg hard) = 0.05 * quc * beta_rqd({beta_q}) = {fs:.2f} kPa"
+    return fs, note
+
+
 def calculate_layered_bearing(layers: list[SoilLayer], pile: PileGeometry, loads: Loads, options: DesignOptions):
     """
     Calculates bearing capacity by iterating through soil layers.
-    Includes GWT effects and Critical Depth concept.
-    Improved settlement calculation (v2.3).
+    Includes GWT effects, Critical Depth, multi rock-socket methods, improved settlement.
     """
-    # 1. Initialize variables
     total_Qs_comp = 0.0
     total_Qs_tens = 0.0
     Qb = 0.0
@@ -18,30 +48,26 @@ def calculate_layered_bearing(layers: list[SoilLayer], pile: PileGeometry, loads
     toe_note = "Toe bearing not calculated (check depths)"
     D_m = pile.diameter / 1000.0
     Ab = math.pi * D_m**2 / 4.0
-    
+
     toe_depth = abs(pile.toe_level - pile.ground_level)
     pile_top_depth = abs(pile.cut_off_level - pile.ground_level)
     gwt_depth = abs(pile.gwt_level - pile.ground_level)
-    
-    # Critical depth for sand (z_c = 15 * D)
+
     critical_depth = 15.0 * D_m
-    
     current_sigma_v_eff = 0.0
-    
-    # 2. Perform Calculations (Layer by Layer)
+
     for layer in layers:
         L_top = layer.depth_top
         L_bottom = layer.depth_bottom
-        
+
         z_start = max(L_top, pile_top_depth)
         z_end = min(L_bottom, toe_depth)
-        
+
         if z_end > z_start:
             seg_length = z_end - z_start
             As_seg = math.pi * D_m * seg_length
-            
             z_mid = (z_start + z_end) / 2.0
-            
+
             def get_sigma_eff(depth):
                 s = 0.0
                 for l in layers:
@@ -61,12 +87,11 @@ def calculate_layered_bearing(layers: list[SoilLayer], pile: PileGeometry, loads
                 return s
 
             sigma_mid_raw = get_sigma_eff(z_mid)
-            # Apply Critical Depth cap
             sigma_mid = min(sigma_mid_raw, get_sigma_eff(critical_depth))
-            
+
             f_s = 0.0
             calc_note = ""
-            
+
             if layer.ignore_skin_friction:
                 f_s = 0.0
                 calc_note = "Skin friction ignored (Socket Mode)"
@@ -87,18 +112,12 @@ def calculate_layered_bearing(layers: list[SoilLayer], pile: PileGeometry, loads
                     beta_q = 0.7
                 else:
                     beta_q = 0.3
-                
-                if quc_kpa < 5000:
-                    f_s = layer.rock_reduction_factor * 0.5 * quc_kpa * beta_q
-                    calc_note = f"fs (Weak) = alpha({layer.rock_reduction_factor}) * 0.5 * quc * beta_rqd({beta_q}) = {f_s:.2f} kPa"
-                else:
-                    f_s = 0.05 * quc_kpa * beta_q
-                    calc_note = f"fs (Hard) = 0.05 * quc * beta_rqd({beta_q}) = {f_s:.2f} kPa"
-            
+                f_s, calc_note = _rock_skin_friction(layer, quc_kpa, beta_q)
+
             qs_layer = f_s * As_seg
             total_Qs_comp += qs_layer
             total_Qs_tens += qs_layer
-            
+
             segments_summary.append({
                 "Layer": layer.name,
                 "Type": layer.soil_type.value,
@@ -107,14 +126,13 @@ def calculate_layered_bearing(layers: list[SoilLayer], pile: PileGeometry, loads
                 "Formula": calc_note,
                 "Qs (kN)": round(qs_layer, 2)
             })
-        
+
         current_sigma_v_eff = get_sigma_eff(L_bottom)
-        
-        # Check for toe bearing
+
         if L_top <= toe_depth <= L_bottom:
             sigma_toe_raw = get_sigma_eff(toe_depth)
             sigma_toe = min(sigma_toe_raw, get_sigma_eff(critical_depth))
-            
+
             if layer.soil_type == SoilType.SAND:
                 Qb = sigma_toe * layer.Nq * Ab
                 toe_note = f"Qb = sigma_v'({sigma_toe:.1f}) * Nq({layer.Nq}) * Ab({Ab:.3f})"
@@ -130,13 +148,12 @@ def calculate_layered_bearing(layers: list[SoilLayer], pile: PileGeometry, loads
                     ncr = 3.0
                 else:
                     ncr = 1.0
-                
                 quc_kpa = layer.quc * 98.0665
                 Qb = ncr * quc_kpa * Ab
-                toe_note = f"Qb = Ncr({ncr}) [based on RQD {layer.RQD:.2f}] * quc({quc_kpa:.1f}) * Ab({Ab:.3f})"
+                method_name = getattr(layer, "rock_method", RockMethod.ROSENBERG_JOURNEAUX).value
+                toe_note = f"Qb = Ncr({ncr}) [RQD {layer.RQD:.2f}, {method_name}] * quc({quc_kpa:.1f}) * Ab({Ab:.3f})"
 
-    # 3. Improved Settlement Calculation (v2.3)
-    # Weighted average Es along the pile shaft
+    # Settlement
     avg_Es = 0.0
     total_L = 0.0
     for layer in layers:
@@ -147,45 +164,28 @@ def calculate_layered_bearing(layers: list[SoilLayer], pile: PileGeometry, loads
             avg_Es += es_layer * (l_b - l_t)
             total_L += (l_b - l_t)
     avg_Es = avg_Es / total_L if total_L > 0 else 25000.0
-    
-    # Pile axial stiffness (Ep in kPa)
+
     Ep = options.E_concrete * 1000.0
-    
-    # Working load for settlement (serviceability)
     P_service = loads.working_vertical if loads.working_vertical > 0 else 1.0
-    
-    # Approximate load distribution: assume ~30-50% of load taken by tip for friction piles
-    # More accurate: use proportion of Qb / Qu
     Qu_temp = total_Qs_comp + Qb
     tip_ratio = Qb / Qu_temp if Qu_temp > 0 else 0.3
     tip_ratio = max(0.1, min(0.7, tip_ratio))
-    
+
     Qb_service = P_service * tip_ratio
     Qs_service = P_service * (1.0 - tip_ratio)
-    
-    # s1: elastic shortening of pile
-    # s1 = (Qb + 0.5*Qs) * L / (Ap * Ep)
-    s1 = (Qb_service + 0.5 * Qs_service) * total_L / (Ab * Ep) * 1000.0  # mm
-    
-    # s2: settlement of pile tip (simplified elastic)
-    # s2 ≈ (qb * D * I_p) / Es   with I_p ≈ 0.5~0.6 for rigid base
+
+    s1 = (Qb_service + 0.5 * Qs_service) * total_L / (Ab * Ep) * 1000.0 if Ab * Ep > 0 else 0.0
     qb = Qb_service / Ab if Ab > 0 else 0.0
-    s2 = (qb * D_m / avg_Es) * 0.55 * 1000.0  # mm
-    
-    # s3: approximate additional settlement from shaft friction transfer (small)
-    s3 = (Qs_service / (math.pi * D_m * total_L * avg_Es / 1000.0)) * 0.3 * 1000.0 if total_L > 0 else 0.0
-    
+    s2 = (qb * D_m / avg_Es) * 0.55 * 1000.0 if avg_Es > 0 else 0.0
+    s3 = (Qs_service / (math.pi * D_m * total_L * avg_Es / 1000.0)) * 0.3 * 1000.0 if total_L > 0 and avg_Es > 0 else 0.0
     total_settlement = s1 + s2 + s3
 
-    # 4. Final results
     Qu_comp = total_Qs_comp + Qb
-    Qall_comp = Qu_comp / options.fos_geotech
-    
+    Qall_comp = Qu_comp / options.fos_geotech if options.fos_geotech > 0 else 0.0
     Qu_tens = total_Qs_tens
-    Qall_tens = Qu_tens / (options.fos_geotech * 1.5)
-    
+    Qall_tens = Qu_tens / (options.fos_geotech * 1.5) if options.fos_geotech > 0 else 0.0
     fos_actual = Qu_comp / loads.working_vertical if loads.working_vertical > 0 else 0.0
-    
+
     l_eff = sum(float(seg["L (m)"]) for seg in segments_summary if "ignored" not in seg["Formula"].lower())
     as_eff = sum(float(seg["Area (m²)"]) for seg in segments_summary if "ignored" not in seg["Formula"].lower())
 
